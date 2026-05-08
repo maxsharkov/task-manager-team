@@ -6,7 +6,11 @@ from datetime import date
 from openai import OpenAI
 
 app = Flask(__name__)
-DATABASE_URL = os.environ["DATABASE_URL"].replace("postgres://", "postgresql://", 1)
+DATABASE_URL = (
+    os.environ.get("DATABASE_URL") or
+    os.environ.get("POSTGRES_URL") or
+    os.environ.get("POSTGRESQL_URL")
+).replace("postgres://", "postgresql://", 1)
 openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 STATUSES = ["Новая", "В работе", "Завершена"]
