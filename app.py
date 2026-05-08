@@ -1,11 +1,13 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 import psycopg2
 import psycopg2.extras
 from datetime import date
+from openai import OpenAI
 
 app = Flask(__name__)
 DATABASE_URL = os.environ["DATABASE_URL"].replace("postgres://", "postgresql://", 1)
+openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 STATUSES = ["Новая", "В работе", "Завершена"]
 PRIORITIES = ["Низкий", "Средний", "Высокий"]
@@ -35,9 +37,7 @@ def index():
     status_filter = request.args.get("status", "")
     priority_filter = request.args.get("priority", "")
 
-    query = """
-        SELECT * FROM tasks WHERE 1=1
-    """
+    query = "SELECT * FROM tasks WHERE 1=1"
     params = []
 
     if status_filter:
@@ -103,6 +103,43 @@ def delete(task_id):
         with conn.cursor() as cur:
             cur.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
     return redirect(url_for("index"))
+
+
+@app.route("/analyze", methods=["POST"])
+def analyze():
+    today = date.today().isoformat()
+
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT title, status, priority, deadline FROM tasks ORDER BY created_at")
+            tasks = cur.fetchall()
+
+    if not tasks:
+        return jsonify({"summary": "Задач пока нет — добавьте первую!"})
+
+    tasks_text = "\n".join([
+        f"- «{t['title']}» | статус: {t['status']} | приоритет: {t['priority']} | дедлайн: {t['deadline'] or 'не указан'}"
+        for t in tasks
+    ])
+
+    response = openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "system",
+                "content": "Ты помощник-менеджер задач. Отвечай на русском языке, кратко и структурированно."
+            },
+            {
+                "role": "user",
+                "content": f"Сегодня {today}. Вот список задач:\n{tasks_text}\n\n"
+                           f"Сделай резюме: что выполнено, что просрочено, что в работе, "
+                           f"что ещё не начато. Предложи как сгруппировать задачи по смыслу."
+            }
+        ]
+    )
+
+    summary = response.choices[0].message.content
+    return jsonify({"summary": summary})
 
 
 init_db()
