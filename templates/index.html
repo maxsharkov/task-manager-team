@@ -128,6 +128,9 @@
 
         .btn-analyze { background: #7c3aed; color: white; padding: 8px 18px; font-size: 0.9rem; }
         .btn-analyze:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-digest-daily  { background: #0ea5e9; color: white; padding: 8px 16px; font-size: 0.9rem; }
+        .btn-digest-weekly { background: #6366f1; color: white; padding: 8px 16px; font-size: 0.9rem; }
+        .btn-digest-daily:disabled, .btn-digest-weekly:disabled { opacity: 0.6; cursor: not-allowed; }
 
         .ai-result {
             background: #f5f3ff;
@@ -189,11 +192,16 @@
 
 <h1>Таск-менеджер</h1>
 
-<!-- AI Анализ -->
+<!-- AI Анализ и Дайджест -->
 <div class="card">
-    <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-        <button class="btn-analyze" id="analyzeBtn" onclick="analyzeTasks()">🤖 Анализ задач (AI)</button>
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <button class="btn-analyze" id="analyzeBtn" onclick="analyzeTasks()">🤖 Анализ задач</button>
+        <button class="btn-digest-daily" id="digestDailyBtn" onclick="sendDigest('daily')">📬 Дайджест сейчас</button>
+        <button class="btn-digest-weekly" id="digestWeeklyBtn" onclick="sendDigest('weekly')">📊 Итоги недели</button>
         <span id="analyzeStatus" style="color:#888; font-size:0.85rem;"></span>
+    </div>
+    <div style="margin-top:8px; font-size:0.78rem; color:#aaa;">
+        Автодайджест: ежедневно в 21:45 и воскресенье в 20:00 по Новосибирску → Telegram
     </div>
     <div id="aiResult" style="margin-top:16px; display:none;">
         <div class="ai-result" id="aiText"></div>
@@ -366,6 +374,33 @@
 </div>
 
 <script>
+// ── Дайджест в Telegram ────────────────────────────────────
+async function sendDigest(type) {
+    const dailyBtn  = document.getElementById("digestDailyBtn");
+    const weeklyBtn = document.getElementById("digestWeeklyBtn");
+    const statusEl  = document.getElementById("analyzeStatus");
+
+    dailyBtn.disabled = true;
+    weeklyBtn.disabled = true;
+    statusEl.textContent = "Отправляю в Telegram...";
+
+    try {
+        const response = await fetch("/digest", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type }),
+        });
+        const data = await response.json();
+        statusEl.textContent = data.ok ? "✓ Отправлено в Telegram" : "Ошибка: " + data.error;
+    } catch (e) {
+        statusEl.textContent = "Ошибка отправки";
+    } finally {
+        dailyBtn.disabled = false;
+        weeklyBtn.disabled = false;
+        setTimeout(() => { statusEl.textContent = ""; }, 4000);
+    }
+}
+
 // ── AI Анализ ──────────────────────────────────────────────
 async function analyzeTasks() {
     const btn = document.getElementById("analyzeBtn");

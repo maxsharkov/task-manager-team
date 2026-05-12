@@ -1,10 +1,14 @@
 import os
 import json
+import requests
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import psycopg2
 import psycopg2.extras
 from datetime import date
 from openai import OpenAI
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+import pytz
 
 app = Flask(__name__)
 DATABASE_URL = (
@@ -13,6 +17,10 @@ DATABASE_URL = (
     os.environ.get("POSTGRESQL_URL")
 ).replace("postgres://", "postgresql://", 1)
 openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+NSK = pytz.timezone("Asia/Novosibirsk")
 
 STATUSES = ["Новая", "В работе", "Завершена"]
 PRIORITIES = ["Низкий", "Средний", "Высокий"]
@@ -42,6 +50,87 @@ def init_db():
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS description TEXT")
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS project TEXT")
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS energy TEXT NOT NULL DEFAULT 'Средняя'")
+
+
+def send_telegram(text):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("Telegram not configured")
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    requests.post(url, json={
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": text,
+        "parse_mode": "Markdown",
+    }, timeout=10)
+
+
+def build_digest(digest_type="daily"):
+    today = date.today().isoformat()
+
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT title, status, priority, deadline, project, energy FROM tasks ORDER BY created_at")
+            tasks = cur.fetchall()
+
+    if not tasks:
+        send_telegram("📋 *Дайджест задач*\n\nЗадач пока нет.")
+        return
+
+    tasks_text = "\n".join([
+        f"- «{t['title']}» | {t['status']} | {t['priority']} | усилия: {t['energy']} "
+        f"| дедлайн: {t['deadline'] or 'не указан'}"
+        + (f" | проект: {t['project']}" if t['project'] else "")
+        for t in tasks
+    ])
+
+    if digest_type == "weekly":
+        prompt = (
+            f"Сегодня {today}, воскресенье. Подведи итоги недели по задачам. "
+            f"Что было сделано, что не успели, что переходит на следующую неделю. "
+            f"Дай оценку недели и 3 фокуса на следующую. Отвечай кратко, по делу, без воды."
+        )
+        header = "📊 *Итоги недели*"
+    else:
+        prompt = (
+            f"Сегодня {today}. Сделай ежедневный дайджест задач: "
+            f"что сделано сегодня, что в работе, что просрочено, что запланировано на завтра. "
+            f"Укажи 1-2 приоритета на завтра. Кратко, структурированно, без воды."
+        )
+        header = "🌙 *Дайджест задач на конец дня*"
+
+    response = openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "system",
+                "content": "Ты помощник-менеджер задач топ-менеджера. Отвечай на русском, кратко, структурированно, без корпоративного языка."
+            },
+            {
+                "role": "user",
+                "content": f"{prompt}\n\nСписок задач:\n{tasks_text}"
+            }
+        ]
+    )
+
+    summary = response.choices[0].message.content
+    send_telegram(f"{header}\n\n{summary}")
+
+
+def daily_digest():
+    build_digest("daily")
+
+
+def weekly_digest():
+    build_digest("weekly")
+
+
+# ── Планировщик ────────────────────────────────────────────
+scheduler = BackgroundScheduler(timezone=NSK)
+# Ежедневно в 21:45 по Новосибирску
+scheduler.add_job(daily_digest, CronTrigger(hour=21, minute=45, timezone=NSK))
+# Воскресенье в 20:00 по Новосибирску
+scheduler.add_job(weekly_digest, CronTrigger(day_of_week="sun", hour=20, minute=0, timezone=NSK))
+scheduler.start()
 
 
 @app.route("/")
@@ -199,6 +288,16 @@ def voice():
     return jsonify(fields)
 
 
+@app.route("/digest", methods=["POST"])
+def digest_manual():
+    digest_type = request.json.get("type", "daily") if request.is_json else "daily"
+    try:
+        build_digest(digest_type)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/analyze", methods=["POST"])
 def analyze():
     today = date.today().isoformat()
@@ -238,10 +337,10 @@ def analyze():
 
 @app.route("/health")
 def health():
-    import traceback
     result = {}
     result["DATABASE_URL_set"] = bool(os.environ.get("DATABASE_URL"))
     result["OPENAI_API_KEY_set"] = bool(os.environ.get("OPENAI_API_KEY"))
+    result["TELEGRAM_configured"] = bool(TELEGRAM_TOKEN and TELEGRAM_CHAT_ID)
     result["DATABASE_URL_prefix"] = (os.environ.get("DATABASE_URL") or "")[:30]
     try:
         with get_db() as conn:
