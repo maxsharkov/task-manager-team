@@ -26,7 +26,7 @@
 
         .add-form {
             display: grid;
-            grid-template-columns: 1fr auto auto auto auto;
+            grid-template-columns: 1fr auto auto auto auto auto;
             gap: 10px;
             align-items: end;
         }
@@ -34,15 +34,23 @@
         .add-form .field { display: flex; flex-direction: column; gap: 4px; }
         .add-form label { font-size: 0.78rem; color: #666; }
 
-        input[type="text"], input[type="date"], select {
+        .add-form-row2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        input[type="text"], input[type="date"], select, textarea {
             padding: 8px 10px;
             border: 1px solid #ddd;
             border-radius: 6px;
             font-size: 0.9rem;
             width: 100%;
         }
+        textarea { resize: vertical; min-height: 60px; font-family: inherit; }
 
-        input[type="text"]:focus, input[type="date"]:focus, select:focus {
+        input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus {
             outline: none;
             border-color: #4a90e2;
         }
@@ -57,8 +65,10 @@
         }
         button:hover { opacity: 0.85; }
 
-        .btn-add { background: #4a90e2; color: white; white-space: nowrap; }
+        .btn-add    { background: #4a90e2; color: white; white-space: nowrap; }
         .btn-delete { background: #e25555; color: white; padding: 5px 10px; font-size: 0.8rem; }
+        .btn-edit   { background: #f0f0f0; color: #333; padding: 5px 10px; font-size: 0.8rem; text-decoration: none; border-radius: 6px; display: inline-block; }
+        .btn-edit:hover { background: #e0e0e0; opacity: 1; }
 
         .filters {
             display: flex;
@@ -97,6 +107,10 @@
         .priority-Средний { background: #fef3e2; color: #e67e22; }
         .priority-Низкий  { background: #e8f5e9; color: #27ae60; }
 
+        .energy-Тяжёлая { background: #fde8e8; color: #7f1d1d; }
+        .energy-Средняя { background: #fef3e2; color: #78350f; }
+        .energy-Лёгкая  { background: #e8f5e9; color: #14532d; }
+
         .status-Новая     { background: #e8f0fe; color: #3b5998; }
         .status-В.работе  { background: #fff3cd; color: #856404; }
         .status-Завершена { background: #d4edda; color: #155724; }
@@ -106,6 +120,9 @@
         .status-form { display: flex; gap: 6px; align-items: center; }
         .status-form select { padding: 4px 6px; font-size: 0.82rem; }
         .btn-status { background: #6c757d; color: white; padding: 4px 10px; font-size: 0.8rem; }
+
+        .task-desc { font-size: 0.8rem; color: #888; margin-top: 2px; }
+        .task-project { font-size: 0.75rem; color: #4a90e2; font-weight: 500; }
 
         .empty { text-align: center; color: #aaa; padding: 32px 0; }
 
@@ -164,6 +181,8 @@
             margin-top: 10px;
             display: none;
         }
+
+        .action-btns { display: flex; gap: 6px; }
     </style>
 </head>
 <body>
@@ -183,7 +202,6 @@
 
 <!-- Форма добавления -->
 <div class="card">
-    <!-- Голосовой ввод -->
     <div class="voice-bar">
         <button type="button" class="btn-voice" id="voiceBtn" onclick="toggleRecording()">
             🎙 Надиктовать задачу
@@ -192,34 +210,54 @@
     </div>
     <div class="voice-preview" id="voicePreview"></div>
 
-    <form class="add-form" id="addForm" action="/add" method="post">
-        <div class="field" style="grid-column: 1;">
-            <label>Задача *</label>
-            <input type="text" name="title" id="fieldTitle" placeholder="Название задачи" required>
+    <form id="addForm" action="/add" method="post">
+        <div class="add-form">
+            <div class="field" style="grid-column: 1;">
+                <label>Задача *</label>
+                <input type="text" name="title" id="fieldTitle" placeholder="Название задачи" required>
+            </div>
+            <div class="field">
+                <label>Статус</label>
+                <select name="status" id="fieldStatus">
+                    {% for s in statuses %}
+                    <option value="{{ s }}">{{ s }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label>Приоритет</label>
+                <select name="priority" id="fieldPriority">
+                    {% for p in priorities %}
+                    <option value="{{ p }}" {% if p == 'Средний' %}selected{% endif %}>{{ p }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label>Усилия</label>
+                <select name="energy" id="fieldEnergy">
+                    {% for e in energies %}
+                    <option value="{{ e }}" {% if e == 'Средняя' %}selected{% endif %}>{{ e }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label>Дедлайн</label>
+                <input type="date" name="deadline" id="fieldDeadline" min="{{ today.isoformat() }}">
+            </div>
+            <div class="field">
+                <label>&nbsp;</label>
+                <button type="submit" class="btn-add">+ Добавить</button>
+            </div>
         </div>
-        <div class="field">
-            <label>Статус</label>
-            <select name="status" id="fieldStatus">
-                {% for s in statuses %}
-                <option value="{{ s }}">{{ s }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="field">
-            <label>Приоритет</label>
-            <select name="priority" id="fieldPriority">
-                {% for p in priorities %}
-                <option value="{{ p }}" {% if p == 'Средний' %}selected{% endif %}>{{ p }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="field">
-            <label>Дедлайн</label>
-            <input type="date" name="deadline" id="fieldDeadline" min="{{ today.isoformat() }}">
-        </div>
-        <div class="field">
-            <label>&nbsp;</label>
-            <button type="submit" class="btn-add">+ Добавить</button>
+        <div class="add-form-row2">
+            <div class="field">
+                <label>Проект / направление</label>
+                <input type="text" name="project" id="fieldProject" placeholder="например: Стратегия 2026, Билайн Восток...">
+            </div>
+            <div class="field">
+                <label>Описание / контекст</label>
+                <textarea name="description" id="fieldDescription" placeholder="Детали, ссылки, контекст..."></textarea>
+            </div>
         </div>
     </form>
 </div>
@@ -257,7 +295,9 @@
             <tr>
                 <th>#</th>
                 <th>Задача</th>
+                <th>Проект</th>
                 <th>Приоритет</th>
+                <th>Усилия</th>
                 <th>Статус</th>
                 <th>Дедлайн</th>
                 <th>Создана</th>
@@ -268,9 +308,24 @@
         {% for task in tasks %}
             <tr>
                 <td style="color:#aaa; font-size:0.85rem;">{{ task.id }}</td>
-                <td>{{ task.title }}</td>
+                <td>
+                    <div>{{ task.title }}</div>
+                    {% if task.description %}
+                    <div class="task-desc">{{ task.description[:80] }}{% if task.description|length > 80 %}…{% endif %}</div>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if task.project %}
+                    <span class="task-project">{{ task.project }}</span>
+                    {% else %}
+                    <span style="color:#ccc;">—</span>
+                    {% endif %}
+                </td>
                 <td>
                     <span class="badge priority-{{ task.priority }}">{{ task.priority }}</span>
+                </td>
+                <td>
+                    <span class="badge energy-{{ task.energy }}">{{ task.energy }}</span>
                 </td>
                 <td>
                     <form class="status-form" action="/update/{{ task.id }}" method="post">
@@ -293,10 +348,13 @@
                 </td>
                 <td style="color:#aaa; font-size:0.85rem;">{{ task.created_at }}</td>
                 <td>
-                    <form action="/delete/{{ task.id }}" method="post"
-                          onsubmit="return confirm('Удалить задачу?')">
-                        <button type="submit" class="btn-delete">✕</button>
-                    </form>
+                    <div class="action-btns">
+                        <a href="/edit/{{ task.id }}" class="btn-edit">✎</a>
+                        <form action="/delete/{{ task.id }}" method="post"
+                              onsubmit="return confirm('Удалить задачу?')">
+                            <button type="submit" class="btn-delete">✕</button>
+                        </form>
+                    </div>
                 </td>
             </tr>
         {% endfor %}
@@ -398,8 +456,9 @@ async function sendAudio() {
             return;
         }
 
-        // Заполняем форму
         document.getElementById("fieldTitle").value = data.title || "";
+        document.getElementById("fieldDescription").value = data.description || "";
+        document.getElementById("fieldProject").value = data.project || "";
 
         const prioritySelect = document.getElementById("fieldPriority");
         for (const opt of prioritySelect.options) {
@@ -411,11 +470,15 @@ async function sendAudio() {
             if (opt.value === data.status) { opt.selected = true; break; }
         }
 
+        const energySelect = document.getElementById("fieldEnergy");
+        for (const opt of energySelect.options) {
+            if (opt.value === data.energy) { opt.selected = true; break; }
+        }
+
         if (data.deadline) {
             document.getElementById("fieldDeadline").value = data.deadline;
         }
 
-        // Показываем транскрипт
         preview.textContent = "🎙 «" + data.transcript + "»";
         preview.style.display = "block";
         statusEl.textContent = "Готово — проверьте поля и нажмите «Добавить»";

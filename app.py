@@ -16,6 +16,7 @@ openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 STATUSES = ["Новая", "В работе", "Завершена"]
 PRIORITIES = ["Низкий", "Средний", "Высокий"]
+ENERGIES = ["Лёгкая", "Средняя", "Тяжёлая"]
 
 
 def get_db():
@@ -32,9 +33,15 @@ def init_db():
                     status TEXT NOT NULL DEFAULT 'Новая',
                     priority TEXT NOT NULL DEFAULT 'Средний',
                     deadline DATE,
-                    created_at DATE DEFAULT CURRENT_DATE
+                    created_at DATE DEFAULT CURRENT_DATE,
+                    description TEXT,
+                    project TEXT,
+                    energy TEXT NOT NULL DEFAULT 'Средняя'
                 )
             """)
+            cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS description TEXT")
+            cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS project TEXT")
+            cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS energy TEXT NOT NULL DEFAULT 'Средняя'")
 
 
 @app.route("/")
@@ -68,6 +75,7 @@ def index():
         tasks=tasks,
         statuses=STATUSES,
         priorities=PRIORITIES,
+        energies=ENERGIES,
         status_filter=status_filter,
         priority_filter=priority_filter,
         today=date.today(),
@@ -83,12 +91,15 @@ def add():
     status = request.form.get("status", "Новая")
     priority = request.form.get("priority", "Средний")
     deadline = request.form.get("deadline") or None
+    description = request.form.get("description", "").strip() or None
+    project = request.form.get("project", "").strip() or None
+    energy = request.form.get("energy", "Средняя")
 
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO tasks (title, status, priority, deadline) VALUES (%s, %s, %s, %s)",
-                (title, status, priority, deadline),
+                "INSERT INTO tasks (title, status, priority, deadline, description, project, energy) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (title, status, priority, deadline, description, project, energy),
             )
     return redirect(url_for("index"))
 
@@ -99,6 +110,39 @@ def update(task_id):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("UPDATE tasks SET status = %s WHERE id = %s", (status, task_id))
+    return redirect(url_for("index"))
+
+
+@app.route("/edit/<int:task_id>", methods=["GET"])
+def edit(task_id):
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT * FROM tasks WHERE id = %s", (task_id,))
+            task = cur.fetchone()
+    if not task:
+        return redirect(url_for("index"))
+    return render_template("edit.html", task=task, statuses=STATUSES, priorities=PRIORITIES, energies=ENERGIES, today=date.today())
+
+
+@app.route("/edit/<int:task_id>", methods=["POST"])
+def edit_save(task_id):
+    title = request.form.get("title", "").strip()
+    if not title:
+        return redirect(url_for("edit", task_id=task_id))
+
+    status = request.form.get("status", "Новая")
+    priority = request.form.get("priority", "Средний")
+    deadline = request.form.get("deadline") or None
+    description = request.form.get("description", "").strip() or None
+    project = request.form.get("project", "").strip() or None
+    energy = request.form.get("energy", "Средняя")
+
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE tasks SET title=%s, status=%s, priority=%s, deadline=%s, description=%s, project=%s, energy=%s WHERE id=%s",
+                (title, status, priority, deadline, description, project, energy, task_id),
+            )
     return redirect(url_for("index"))
 
 
@@ -134,8 +178,12 @@ def voice():
                     "Верни ТОЛЬКО валидный JSON без markdown-блоков. "
                     "Поля: title (строка), priority (одно из: Низкий, Средний, Высокий), "
                     "status (одно из: Новая, В работе, Завершена), "
-                    "deadline (дата YYYY-MM-DD или null). "
-                    "Если приоритет не упомянут — Средний. Если статус не упомянут — Новая."
+                    "deadline (дата YYYY-MM-DD или null), "
+                    "description (краткое описание или контекст задачи, строка или null), "
+                    "project (название проекта или направления, строка или null), "
+                    "energy (одно из: Лёгкая, Средняя, Тяжёлая — оцени по сложности задачи). "
+                    "Если приоритет не упомянут — Средний. Если статус не упомянут — Новая. "
+                    "Если энергия не упомянута — оцени самостоятельно по смыслу задачи."
                 )
             },
             {
