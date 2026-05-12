@@ -20,6 +20,7 @@ openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 NSK = pytz.timezone("Asia/Novosibirsk")
 
 STATUSES = ["Новая", "В работе", "Завершена"]
@@ -324,6 +325,161 @@ def voice():
     fields = json.loads(response.choices[0].message.content)
     fields["transcript"] = text
     return jsonify(fields)
+
+
+def tg_reply(chat_id, text):
+    requests.post(
+        f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+        json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"},
+        timeout=10,
+    )
+
+
+def get_tg_file(file_id):
+    info = requests.get(
+        f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getFile",
+        params={"file_id": file_id}, timeout=10
+    ).json()
+    file_path = info["result"]["file_path"]
+    audio = requests.get(
+        f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}", timeout=30
+    )
+    return audio.content
+
+
+def get_all_tasks_text():
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT id, title, status, priority, deadline, project, tags, energy FROM tasks ORDER BY created_at")
+            tasks = cur.fetchall()
+    if not tasks:
+        return None, []
+    lines = []
+    for t in tasks:
+        line = f"[{t['id']}] «{t['title']}» | {t['status']} | {t['priority']}"
+        if t['project']:
+            line += f" | {t['project']}"
+        if t['deadline']:
+            line += f" | до {t['deadline']}"
+        if t['tags']:
+            line += f" | #{' #'.join(parse_tags(t['tags']))}"
+        lines.append(line)
+    return "\n".join(lines), tasks
+
+
+def process_bot_message(text):
+    today = date.today().isoformat()
+    tasks_text, _ = get_all_tasks_text()
+    tasks_context = f"Список задач:\n{tasks_text}" if tasks_text else "Задач пока нет."
+
+    response = openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    f"Ты умный ассистент таск-менеджера. Сегодня {today}.\n"
+                    f"{tasks_context}\n\n"
+                    "Ты можешь:\n"
+                    "1. Отвечать на вопросы о задачах\n"
+                    "2. Добавлять новые задачи\n"
+                    "3. Давать дайджест/статус\n\n"
+                    "Верни JSON: {\"action\": \"answer\"|\"add_task\", \"text\": \"...\", "
+                    "\"task\": {\"title\": ..., \"priority\": \"Низкий|Средний|Высокий\", "
+                    "\"status\": \"Новая|В работе|Завершена\", \"deadline\": \"YYYY-MM-DD или null\", "
+                    "\"project\": \"...\", \"tags\": \"...\", \"energy\": \"Лёгкая|Средняя|Тяжёлая\", "
+                    "\"description\": \"...\"}}.\n"
+                    "action=add_task если пользователь хочет добавить задачу. "
+                    "action=answer для всего остального. "
+                    "text — ответ пользователю на русском, кратко."
+                )
+            },
+            {"role": "user", "content": text}
+        ],
+        response_format={"type": "json_object"},
+    )
+
+    result = json.loads(response.choices[0].message.content)
+
+    if result.get("action") == "add_task" and result.get("task"):
+        t = result["task"]
+        tags = normalize_tags(t.get("tags", ""))
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO tasks (title, status, priority, deadline, description, project, energy, tags) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (
+                        t.get("title", "Без названия"),
+                        t.get("status", "Новая"),
+                        t.get("priority", "Средний"),
+                        t.get("deadline") or None,
+                        t.get("description") or None,
+                        t.get("project") or None,
+                        t.get("energy", "Средняя"),
+                        tags,
+                    )
+                )
+        return result.get("text", "✅ Задача добавлена")
+
+    return result.get("text", "Не понял запрос — попробуй ещё раз")
+
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    if not TELEGRAM_TOKEN:
+        return jsonify({"ok": False}), 400
+
+    update = request.json or {}
+    message = update.get("message", {})
+    chat_id = message.get("chat", {}).get("id")
+    if not chat_id:
+        return jsonify({"ok": True})
+
+    # Только от владельца
+    if str(chat_id) != str(TELEGRAM_CHAT_ID):
+        tg_reply(chat_id, "Нет доступа.")
+        return jsonify({"ok": True})
+
+    try:
+        # Голосовое сообщение
+        if "voice" in message:
+            tg_reply(chat_id, "🎙 Обрабатываю...")
+            audio_bytes = get_tg_file(message["voice"]["file_id"])
+            import io
+            transcript = openai_client.audio.transcriptions.create(
+                model="whisper-1",
+                file=("voice.ogg", io.BytesIO(audio_bytes), "audio/ogg"),
+                language="ru",
+            )
+            text = transcript.text
+            reply = process_bot_message(text)
+            tg_reply(chat_id, f"🎙 «{text}»\n\n{reply}")
+
+        # Текстовое сообщение
+        elif "text" in message:
+            text = message["text"]
+            if text == "/start":
+                tg_reply(chat_id, "👋 Привет! Я таск-менеджер.\n\nМогу:\n• Показать задачи\n• Добавить задачу голосом или текстом\n• Дать дайджест\n\nПросто напиши или надиктуй.")
+            else:
+                reply = process_bot_message(text)
+                tg_reply(chat_id, reply)
+
+    except Exception as e:
+        tg_reply(chat_id, f"⚠️ Ошибка: {str(e)[:200]}")
+
+    return jsonify({"ok": True})
+
+
+@app.route("/setup-webhook")
+def setup_webhook():
+    if not TELEGRAM_TOKEN or not WEBHOOK_URL:
+        return jsonify({"error": "TELEGRAM_BOT_TOKEN или WEBHOOK_URL не настроены"}), 400
+    res = requests.post(
+        f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook",
+        json={"url": WEBHOOK_URL},
+        timeout=10,
+    ).json()
+    return jsonify(res)
 
 
 @app.route("/ai-search", methods=["POST"])
