@@ -1,4 +1,5 @@
 import os
+import json
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import psycopg2
 import psycopg2.extras
@@ -107,6 +108,47 @@ def delete(task_id):
         with conn.cursor() as cur:
             cur.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
     return redirect(url_for("index"))
+
+
+@app.route("/voice", methods=["POST"])
+def voice():
+    audio_file = request.files.get("audio")
+    if not audio_file:
+        return jsonify({"error": "Нет аудио"}), 400
+
+    transcript = openai_client.audio.transcriptions.create(
+        model="whisper-1",
+        file=("audio.webm", audio_file.stream, audio_file.mimetype or "audio/webm"),
+        language="ru",
+    )
+    text = transcript.text
+
+    today = date.today().isoformat()
+    response = openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Ты помощник, который извлекает поля задачи из голосового сообщения. "
+                    "Верни ТОЛЬКО валидный JSON без markdown-блоков. "
+                    "Поля: title (строка), priority (одно из: Низкий, Средний, Высокий), "
+                    "status (одно из: Новая, В работе, Завершена), "
+                    "deadline (дата YYYY-MM-DD или null). "
+                    "Если приоритет не упомянут — Средний. Если статус не упомянут — Новая."
+                )
+            },
+            {
+                "role": "user",
+                "content": f"Сегодня {today}. Голосовое сообщение: «{text}»"
+            }
+        ],
+        response_format={"type": "json_object"},
+    )
+
+    fields = json.loads(response.choices[0].message.content)
+    fields["transcript"] = text
+    return jsonify(fields)
 
 
 @app.route("/analyze", methods=["POST"])

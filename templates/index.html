@@ -121,6 +121,49 @@
             font-size: 0.9rem;
             line-height: 1.6;
         }
+
+        /* Voice input */
+        .voice-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+
+        .btn-voice {
+            background: #16a34a;
+            color: white;
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+        .btn-voice.recording {
+            background: #dc2626;
+            animation: pulse 1s infinite;
+        }
+        .btn-voice:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.65; }
+        }
+
+        .voice-status { font-size: 0.85rem; color: #888; }
+
+        .voice-preview {
+            background: #f0fdf4;
+            border-left: 4px solid #16a34a;
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-size: 0.85rem;
+            color: #166534;
+            margin-top: 10px;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -130,7 +173,7 @@
 <!-- AI Анализ -->
 <div class="card">
     <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-        <button class="btn-analyze" id="analyzeBtn" onclick="analyzeТasks()">🤖 Анализ задач (AI)</button>
+        <button class="btn-analyze" id="analyzeBtn" onclick="analyzeTasks()">🤖 Анализ задач (AI)</button>
         <span id="analyzeStatus" style="color:#888; font-size:0.85rem;"></span>
     </div>
     <div id="aiResult" style="margin-top:16px; display:none;">
@@ -140,14 +183,23 @@
 
 <!-- Форма добавления -->
 <div class="card">
-    <form class="add-form" action="/add" method="post">
+    <!-- Голосовой ввод -->
+    <div class="voice-bar">
+        <button type="button" class="btn-voice" id="voiceBtn" onclick="toggleRecording()">
+            🎙 Надиктовать задачу
+        </button>
+        <span class="voice-status" id="voiceStatus"></span>
+    </div>
+    <div class="voice-preview" id="voicePreview"></div>
+
+    <form class="add-form" id="addForm" action="/add" method="post">
         <div class="field" style="grid-column: 1;">
             <label>Задача *</label>
-            <input type="text" name="title" placeholder="Название задачи" required>
+            <input type="text" name="title" id="fieldTitle" placeholder="Название задачи" required>
         </div>
         <div class="field">
             <label>Статус</label>
-            <select name="status">
+            <select name="status" id="fieldStatus">
                 {% for s in statuses %}
                 <option value="{{ s }}">{{ s }}</option>
                 {% endfor %}
@@ -155,7 +207,7 @@
         </div>
         <div class="field">
             <label>Приоритет</label>
-            <select name="priority">
+            <select name="priority" id="fieldPriority">
                 {% for p in priorities %}
                 <option value="{{ p }}" {% if p == 'Средний' %}selected{% endif %}>{{ p }}</option>
                 {% endfor %}
@@ -163,7 +215,7 @@
         </div>
         <div class="field">
             <label>Дедлайн</label>
-            <input type="date" name="deadline" min="{{ today.isoformat() }}">
+            <input type="date" name="deadline" id="fieldDeadline" min="{{ today.isoformat() }}">
         </div>
         <div class="field">
             <label>&nbsp;</label>
@@ -256,7 +308,8 @@
 </div>
 
 <script>
-async function analyzeТasks() {
+// ── AI Анализ ──────────────────────────────────────────────
+async function analyzeTasks() {
     const btn = document.getElementById("analyzeBtn");
     const status = document.getElementById("analyzeStatus");
     const result = document.getElementById("aiResult");
@@ -274,6 +327,100 @@ async function analyzeТasks() {
         status.textContent = "";
     } catch (e) {
         status.textContent = "Ошибка — попробуйте ещё раз";
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// ── Голосовой ввод ─────────────────────────────────────────
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+
+async function toggleRecording() {
+    if (isRecording) {
+        mediaRecorder.stop();
+    } else {
+        await startRecording();
+    }
+}
+
+async function startRecording() {
+    const btn = document.getElementById("voiceBtn");
+    const statusEl = document.getElementById("voiceStatus");
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+
+        mediaRecorder.ondataavailable = e => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            btn.classList.remove("recording");
+            btn.textContent = "🎙 Надиктовать задачу";
+            isRecording = false;
+            await sendAudio();
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        btn.classList.add("recording");
+        btn.textContent = "⏹ Остановить запись";
+        statusEl.textContent = "Запись идёт...";
+    } catch (e) {
+        statusEl.textContent = "Нет доступа к микрофону";
+    }
+}
+
+async function sendAudio() {
+    const btn = document.getElementById("voiceBtn");
+    const statusEl = document.getElementById("voiceStatus");
+    const preview = document.getElementById("voicePreview");
+
+    btn.disabled = true;
+    statusEl.textContent = "Обрабатываю...";
+    preview.style.display = "none";
+
+    try {
+        const blob = new Blob(audioChunks, { type: "audio/webm" });
+        const formData = new FormData();
+        formData.append("audio", blob, "audio.webm");
+
+        const response = await fetch("/voice", { method: "POST", body: formData });
+        const data = await response.json();
+
+        if (data.error) {
+            statusEl.textContent = "Ошибка: " + data.error;
+            return;
+        }
+
+        // Заполняем форму
+        document.getElementById("fieldTitle").value = data.title || "";
+
+        const prioritySelect = document.getElementById("fieldPriority");
+        for (const opt of prioritySelect.options) {
+            if (opt.value === data.priority) { opt.selected = true; break; }
+        }
+
+        const statusSelect = document.getElementById("fieldStatus");
+        for (const opt of statusSelect.options) {
+            if (opt.value === data.status) { opt.selected = true; break; }
+        }
+
+        if (data.deadline) {
+            document.getElementById("fieldDeadline").value = data.deadline;
+        }
+
+        // Показываем транскрипт
+        preview.textContent = "🎙 «" + data.transcript + "»";
+        preview.style.display = "block";
+        statusEl.textContent = "Готово — проверьте поля и нажмите «Добавить»";
+    } catch (e) {
+        statusEl.textContent = "Ошибка обработки — попробуйте ещё раз";
     } finally {
         btn.disabled = false;
     }
