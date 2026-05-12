@@ -187,22 +187,30 @@
 
         .action-btns { display: flex; gap: 6px; }
 
-        /* ── Mobile ─────────────────────────────────────────── */
-        @media (max-width: 640px) {
+        /* ── Tablet / landscape phone: таблица скроллится ─────── */
+        @media (max-width: 1024px) {
+            .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        }
+        /* скрываем незначимые колонки на средних экранах */
+        @media (max-width: 900px) {
+            th:first-child, td:first-child { display: none; }   /* # */
+            th:nth-child(8), td:nth-child(8) { display: none; } /* Создана */
+        }
+
+        /* ── Mobile: карточки (portrait + landscape iPhone) ─── */
+        @media (max-width: 768px) {
             body { padding: 12px; }
             h1 { font-size: 1.25rem; margin-bottom: 16px; }
 
             .card { padding: 14px; }
 
-            /* Форма — одна колонка */
-            .add-form {
-                grid-template-columns: 1fr 1fr;
-            }
+            /* Форма */
+            .add-form { grid-template-columns: 1fr 1fr; }
             .add-form .field:first-child { grid-column: 1 / -1; }
             .add-form .field:last-child  { grid-column: 1 / -1; }
             .add-form-row2 { grid-template-columns: 1fr; }
 
-            /* Кнопки — полная ширина */
+            /* Кнопки */
             .btn-add { width: 100%; }
             .btn-analyze, .btn-digest-daily, .btn-digest-weekly {
                 width: 100%; justify-content: center;
@@ -210,6 +218,7 @@
             .btn-voice { width: 100%; justify-content: center; }
 
             /* Таблица → карточки */
+            .table-wrap { overflow-x: visible; }
             table thead { display: none; }
             table tbody tr {
                 display: block;
@@ -227,6 +236,13 @@
                 border-bottom: 1px solid #f5f5f5;
                 font-size: 0.85rem;
             }
+            /* отменяем скрытие колонок из правила выше */
+            th:first-child, td:first-child,
+            th:nth-child(8), td:nth-child(8) { display: flex; }
+            /* скрываем # и Создана в карточках (не нужны) */
+            table td:first-child  { display: none; }
+            table td:nth-child(8) { display: none; }
+
             table td:last-child { border-bottom: none; padding-top: 8px; }
             table td[data-label]::before {
                 content: attr(data-label);
@@ -238,8 +254,6 @@
                 flex-shrink: 0;
                 margin-right: 8px;
             }
-            /* скрываем колонку # на мобильном */
-            table td:first-child { display: none; }
 
             .status-form { flex-wrap: wrap; justify-content: flex-end; }
             .action-btns { justify-content: flex-end; }
@@ -356,6 +370,7 @@
 <!-- Таблица задач -->
 <div class="card">
     {% if tasks %}
+    <div class="table-wrap">
     <table>
         <thead>
             <tr>
@@ -426,6 +441,7 @@
         {% endfor %}
         </tbody>
     </table>
+    </div>
     {% else %}
     <div class="empty">Нет задач. Добавьте первую!</div>
     {% endif %}
