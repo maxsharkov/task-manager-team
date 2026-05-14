@@ -27,7 +27,7 @@
         .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 16px; }
         label { font-size: 0.8rem; color: #666; font-weight: 500; }
 
-        input[type="text"], input[type="date"], select, textarea {
+        input[type="text"], input[type="date"], select {
             padding: 9px 12px;
             border: 1px solid #ddd;
             border-radius: 6px;
@@ -35,9 +35,8 @@
             width: 100%;
             font-family: inherit;
         }
-        textarea { resize: vertical; min-height: 80px; }
 
-        input:focus, select:focus, textarea:focus {
+        input:focus, select:focus {
             outline: none;
             border-color: #4a90e2;
         }
@@ -113,26 +112,15 @@
             </div>
         </div>
 
-        <div class="field">
-            <label>Проект / направление</label>
-            <input type="text" name="project" value="{{ task.project or '' }}" placeholder="например: Стратегия 2026, Билайн Восток...">
-        </div>
-
-        <div class="field">
-            <label>Теги (через запятую или пробел)</label>
-            <input type="text" name="tags" value="{{ task.tags or '' }}" placeholder="#команда #звонок срочно...">
-            {% if task.tags %}
-            <div style="margin-top:5px; display:flex; flex-wrap:wrap; gap:4px;">
-                {% for tag in parse_tags(task.tags) %}
-                <span style="background:#e0f2fe;color:#0369a1;border-radius:10px;padding:1px 8px;font-size:0.72rem;font-weight:500;">#{{ tag }}</span>
-                {% endfor %}
+        <div class="row2">
+            <div class="field">
+                <label>Проект / направление</label>
+                <input type="text" name="project" value="{{ task.project or '' }}" placeholder="например: Стратегия 2026...">
             </div>
-            {% endif %}
-        </div>
-
-        <div class="field">
-            <label>Описание / контекст</label>
-            <textarea name="description" placeholder="Детали, ссылки, контекст...">{{ task.description or '' }}</textarea>
+            <div class="field">
+                <label>Исполнитель</label>
+                <input type="text" name="assignee" value="{{ task.assignee or '' }}" placeholder="Кто должен сделать...">
+            </div>
         </div>
 
         <div class="actions">

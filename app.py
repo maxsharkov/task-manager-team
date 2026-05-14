@@ -52,6 +52,7 @@ def init_db():
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS project TEXT")
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS energy TEXT NOT NULL DEFAULT 'Средняя'")
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS tags TEXT")
+            cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee TEXT")
 
 
 def send_telegram(text):
@@ -216,16 +217,15 @@ def add():
     status = request.form.get("status", "Новая")
     priority = request.form.get("priority", "Средний")
     deadline = request.form.get("deadline") or None
-    description = request.form.get("description", "").strip() or None
     project = request.form.get("project", "").strip() or None
     energy = request.form.get("energy", "Средняя")
-    tags = normalize_tags(request.form.get("tags", ""))
+    assignee = request.form.get("assignee", "").strip() or None
 
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO tasks (title, status, priority, deadline, description, project, energy, tags) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                (title, status, priority, deadline, description, project, energy, tags),
+                "INSERT INTO tasks (title, status, priority, deadline, project, energy, assignee) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (title, status, priority, deadline, project, energy, assignee),
             )
     return redirect(url_for("index"))
 
@@ -259,16 +259,15 @@ def edit_save(task_id):
     status = request.form.get("status", "Новая")
     priority = request.form.get("priority", "Средний")
     deadline = request.form.get("deadline") or None
-    description = request.form.get("description", "").strip() or None
     project = request.form.get("project", "").strip() or None
     energy = request.form.get("energy", "Средняя")
-    tags = normalize_tags(request.form.get("tags", ""))
+    assignee = request.form.get("assignee", "").strip() or None
 
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE tasks SET title=%s, status=%s, priority=%s, deadline=%s, description=%s, project=%s, energy=%s, tags=%s WHERE id=%s",
-                (title, status, priority, deadline, description, project, energy, tags, task_id),
+                "UPDATE tasks SET title=%s, status=%s, priority=%s, deadline=%s, project=%s, energy=%s, assignee=%s WHERE id=%s",
+                (title, status, priority, deadline, project, energy, assignee, task_id),
             )
     return redirect(url_for("index"))
 
@@ -309,7 +308,7 @@ def voice():
                     "description (краткое описание или контекст задачи, строка или null), "
                     "project (название проекта или направления, строка или null), "
                     "energy (одно из: Лёгкая, Средняя, Тяжёлая — оцени по сложности задачи), "
-                    "tags (строка тегов через запятую, без #, или null — извлеки из контекста: команда, звонок, встреча, отчёт и т.п.). "
+                    "assignee (кто должен сделать задачу, строка или null). "
                     "Если приоритет не упомянут — Средний. Если статус не упомянут — Новая. "
                     "Если энергия не упомянута — оцени самостоятельно по смыслу задачи."
                 )
@@ -387,8 +386,7 @@ def process_bot_message(text):
                     "Верни JSON: {\"action\": \"answer\"|\"add_task\", \"text\": \"...\", "
                     "\"task\": {\"title\": ..., \"priority\": \"Низкий|Средний|Высокий\", "
                     "\"status\": \"Новая|В работе|Завершена\", \"deadline\": \"YYYY-MM-DD или null\", "
-                    "\"project\": \"...\", \"tags\": \"...\", \"energy\": \"Лёгкая|Средняя|Тяжёлая\", "
-                    "\"description\": \"...\"}}.\n"
+                    "\"project\": \"...\", \"assignee\": \"...\", \"energy\": \"Лёгкая|Средняя|Тяжёлая\"}}.\n"
                     "action=add_task если пользователь хочет добавить задачу. "
                     "action=answer для всего остального. "
                     "text — ответ пользователю на русском, кратко."
@@ -407,16 +405,15 @@ def process_bot_message(text):
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO tasks (title, status, priority, deadline, description, project, energy, tags) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "INSERT INTO tasks (title, status, priority, deadline, project, energy, assignee) VALUES (%s,%s,%s,%s,%s,%s,%s)",
                     (
                         t.get("title", "Без названия"),
                         t.get("status", "Новая"),
                         t.get("priority", "Средний"),
                         t.get("deadline") or None,
-                        t.get("description") or None,
                         t.get("project") or None,
                         t.get("energy", "Средняя"),
-                        tags,
+                        t.get("assignee") or None,
                     )
                 )
         return result.get("text", "✅ Задача добавлена")

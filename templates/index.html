@@ -241,7 +241,7 @@
         /* скрываем незначимые колонки на средних экранах */
         @media (max-width: 900px) {
             th:first-child, td:first-child { display: none; }   /* # */
-            th:nth-child(8), td:nth-child(8) { display: none; } /* Создана */
+            th:nth-child(9), td:nth-child(9) { display: none; } /* Создана */
         }
 
         /* ── Mobile: карточки (portrait + landscape iPhone) ─── */
@@ -285,10 +285,10 @@
             }
             /* отменяем скрытие колонок из правила выше */
             th:first-child, td:first-child,
-            th:nth-child(8), td:nth-child(8) { display: flex; }
+            th:nth-child(9), td:nth-child(9) { display: flex; }
             /* скрываем # и Создана в карточках (не нужны) */
             table td:first-child  { display: none; }
-            table td:nth-child(8) { display: none; }
+            table td:nth-child(9) { display: none; }
 
             table td:last-child { border-bottom: none; padding-top: 8px; }
             table td[data-label]::before {
@@ -382,14 +382,9 @@
                 <input type="text" name="project" id="fieldProject" placeholder="например: Стратегия 2026, Билайн Восток...">
             </div>
             <div class="field">
-                <label>Теги (через запятую или пробел)</label>
-                <input type="text" name="tags" id="fieldTags" placeholder="#команда #звонок срочно..." autocomplete="off">
-                <div id="tagSuggestions" style="display:none; margin-top:4px; display:flex; flex-wrap:wrap; gap:4px;"></div>
+                <label>Исполнитель</label>
+                <input type="text" name="assignee" id="fieldAssignee" placeholder="Кто должен сделать...">
             </div>
-        </div>
-        <div class="field" style="margin-top:10px;">
-            <label>Описание / контекст</label>
-            <textarea name="description" id="fieldDescription" placeholder="Детали, ссылки, контекст..."></textarea>
         </div>
     </form>
 </div>
@@ -427,12 +422,7 @@
             {% endfor %}
         </select>
 
-        {% if tag_filter %}
-        <label>Тег:</label>
-        <span class="tag tag-active">#{{ tag_filter }}</span>
-        {% endif %}
-
-        {% if status_filter or priority_filter or tag_filter %}
+        {% if status_filter or priority_filter %}
         <a href="/">✕ Сбросить</a>
         {% endif %}
     </form>
@@ -448,6 +438,7 @@
                 <th>#</th>
                 <th>Задача</th>
                 <th>Проект</th>
+                <th>Исполнитель</th>
                 <th>Приоритет</th>
                 <th>Усилия</th>
                 <th>Статус</th>
@@ -462,20 +453,17 @@
                 <td style="color:#aaa; font-size:0.85rem;">{{ task.id }}</td>
                 <td data-label="Задача">
                     <div>{{ task.title }}</div>
-                    {% if task.tags %}
-                    <div class="tags-wrap">
-                        {% for tag in parse_tags(task.tags) %}
-                        <a href="/?tag={{ tag }}&status={{ status_filter }}&priority={{ priority_filter }}" class="tag {% if tag == tag_filter %}tag-active{% endif %}">#{{ tag }}</a>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-                    {% if task.description %}
-                    <div class="task-desc">{{ task.description[:80] }}{% if task.description|length > 80 %}…{% endif %}</div>
-                    {% endif %}
                 </td>
                 <td data-label="Проект">
                     {% if task.project %}
                     <span class="task-project">{{ task.project }}</span>
+                    {% else %}
+                    <span style="color:#ccc;">—</span>
+                    {% endif %}
+                </td>
+                <td data-label="Исполнитель">
+                    {% if task.assignee %}
+                    <span style="font-size:0.85rem;">{{ task.assignee }}</span>
                     {% else %}
                     <span style="color:#ccc;">—</span>
                     {% endif %}
@@ -577,33 +565,6 @@ async function runAiSearch() {
         btn.disabled = false;
         btn.textContent = "🔮 AI поиск";
     }
-}
-
-// ── Теги: автоподсказки ────────────────────────────────────
-let allTags = [];
-fetch("/tags").then(r => r.json()).then(tags => {
-    allTags = tags;
-    renderTagSuggestions(document.getElementById("fieldTags"));
-});
-
-function renderTagSuggestions(input) {
-    const box = document.getElementById("tagSuggestions");
-    if (!allTags.length) return;
-    box.innerHTML = "";
-    allTags.forEach(tag => {
-        const chip = document.createElement("span");
-        chip.className = "tag";
-        chip.textContent = "#" + tag;
-        chip.onclick = () => {
-            const cur = input.value.trim();
-            const existing = cur ? cur.split(/[\s,]+/).map(t => t.replace(/^#/, "")) : [];
-            if (!existing.includes(tag)) {
-                input.value = (cur ? cur + " " : "") + "#" + tag;
-            }
-            input.focus();
-        };
-        box.appendChild(chip);
-    });
 }
 
 // ── Дайджест в Telegram ────────────────────────────────────
@@ -746,8 +707,8 @@ async function sendAudio() {
             document.getElementById("fieldDeadline").value = data.deadline;
         }
 
-        if (data.tags) {
-            document.getElementById("fieldTags").value = data.tags;
+        if (data.assignee) {
+            document.getElementById("fieldAssignee").value = data.assignee;
         }
 
         preview.textContent = "🎙 «" + data.transcript + "»";
