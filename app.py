@@ -53,6 +53,7 @@ def init_db():
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS energy TEXT NOT NULL DEFAULT 'Средняя'")
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS tags TEXT")
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee TEXT")
+            cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS progress TEXT")
 
 
 def send_telegram(text):
@@ -262,12 +263,13 @@ def edit_save(task_id):
     project = request.form.get("project", "").strip() or None
     energy = request.form.get("energy", "Средняя")
     assignee = request.form.get("assignee", "").strip() or None
+    progress = request.form.get("progress", "").strip() or None
 
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE tasks SET title=%s, status=%s, priority=%s, deadline=%s, project=%s, energy=%s, assignee=%s WHERE id=%s",
-                (title, status, priority, deadline, project, energy, assignee, task_id),
+                "UPDATE tasks SET title=%s, status=%s, priority=%s, deadline=%s, project=%s, energy=%s, assignee=%s, progress=%s WHERE id=%s",
+                (title, status, priority, deadline, project, energy, assignee, progress, task_id),
             )
     return redirect(url_for("index"))
 

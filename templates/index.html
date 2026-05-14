@@ -453,6 +453,9 @@
                 <td style="color:#aaa; font-size:0.85rem;">{{ task.id }}</td>
                 <td data-label="Задача">
                     <div>{{ task.title }}</div>
+                    {% if task.progress %}
+                    <div style="font-size:0.78rem; color:#16a34a; margin-top:3px;">↳ {{ task.progress[:80] }}{% if task.progress|length > 80 %}…{% endif %}</div>
+                    {% endif %}
                 </td>
                 <td data-label="Проект">
                     {% if task.project %}

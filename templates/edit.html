@@ -27,7 +27,7 @@
         .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 16px; }
         label { font-size: 0.8rem; color: #666; font-weight: 500; }
 
-        input[type="text"], input[type="date"], select {
+        input[type="text"], input[type="date"], select, textarea {
             padding: 9px 12px;
             border: 1px solid #ddd;
             border-radius: 6px;
@@ -121,6 +121,11 @@
                 <label>Исполнитель</label>
                 <input type="text" name="assignee" value="{{ task.assignee or '' }}" placeholder="Кто должен сделать...">
             </div>
+        </div>
+
+        <div class="field">
+            <label>Что сделано сейчас</label>
+            <textarea name="progress" placeholder="Текущий прогресс, промежуточные результаты..." style="resize:vertical; min-height:80px; font-family:inherit;">{{ task.progress or '' }}</textarea>
         </div>
 
         <div class="actions">
