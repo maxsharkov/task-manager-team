@@ -277,6 +277,8 @@
             font-size: 0.68rem; color: #5e5ce6; font-weight: 600;
             margin-left: 6px; vertical-align: middle;
         }
+        .category-work    { font-size: 0.7rem; font-weight: 600; color: #0071e3; }
+        .category-personal { font-size: 0.7rem; font-weight: 600; color: #ff9500; }
 
         /* ── Responsive ──────────────────────────────────────── */
         @media (max-width: 900px) {
@@ -428,6 +430,14 @@
                     {% endfor %}
                 </select>
             </div>
+            <div class="field">
+                <label>Категория</label>
+                <select name="category" id="fieldCategory">
+                    {% for c in categories %}
+                    <option value="{{ c }}">{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </div>
         </div>
     </form>
 </div>
@@ -510,6 +520,9 @@
                         {{ task.title }}
                         {% if task.recurrence %}<span class="recurrence-badge">↻ {{ task.recurrence }}</span>{% endif %}
                     </div>
+                    {% if task.category %}
+                    <div><span class="{{ 'category-work' if task.category == 'Работа' else 'category-personal' }}">{{ '🏢' if task.category == 'Работа' else '👤' }} {{ task.category }}</span></div>
+                    {% endif %}
                     {% if task.progress %}
                     <div class="task-progress">↳ {{ task.progress[:80] }}{% if task.progress|length > 80 %}…{% endif %}</div>
                     {% endif %}

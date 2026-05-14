@@ -190,6 +190,15 @@
         </div>
 
         <div class="field">
+            <label>Категория</label>
+            <select name="category">
+                {% for c in categories %}
+                <option value="{{ c }}" {% if c == task.category %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="field">
             <label>Повторение</label>
             <select name="recurrence">
                 <option value="" {% if not task.recurrence %}selected{% endif %}>Не повторяется</option>

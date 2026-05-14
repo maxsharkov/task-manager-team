@@ -28,6 +28,7 @@ NSK = pytz.timezone("Asia/Novosibirsk")
 STATUSES = ["Новая", "В работе", "Завершена"]
 PRIORITIES = ["Низкий", "Средний", "Высокий"]
 ENERGIES = ["Лёгкая", "Средняя", "Тяжёлая"]
+CATEGORIES = ["Работа", "Личное"]
 RECURRENCES = ["Ежедневно", "Еженедельно", "Ежемесячно"]
 
 
@@ -76,6 +77,7 @@ def init_db():
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS calendar_event_id TEXT")
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence TEXT")
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS closed_at DATE")
+            cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS category TEXT")
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS subtasks (
                     id SERIAL PRIMARY KEY,
@@ -103,7 +105,7 @@ def build_digest(digest_type="daily"):
 
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT title, status, priority, deadline, project, energy FROM tasks ORDER BY created_at")
+            cur.execute("SELECT title, status, priority, deadline, project, energy, category, closed_at FROM tasks ORDER BY created_at")
             tasks = cur.fetchall()
 
     if not tasks:
@@ -111,37 +113,56 @@ def build_digest(digest_type="daily"):
         return
 
     tasks_text = "\n".join([
-        f"- «{t['title']}» | {t['status']} | {t['priority']} | усилия: {t['energy']} "
-        f"| дедлайн: {t['deadline'] or 'не указан'}"
+        f"- [{t['category'] or '?'}] «{t['title']}» | {t['status']} | {t['priority']}"
+        f" | дедлайн: {t['deadline'] or 'не указан'}"
+        + (f" | закрыта: {t['closed_at']}" if t['closed_at'] else "")
         + (f" | проект: {t['project']}" if t['project'] else "")
         for t in tasks
     ])
 
     if digest_type == "weekly":
-        prompt = (
-            f"Сегодня {today}, воскресенье. Подведи итоги недели по задачам. "
-            f"Что было сделано, что не успели, что переходит на следующую неделю. "
-            f"Дай оценку недели и 3 фокуса на следующую. Отвечай кратко, по делу, без воды."
-        )
-        header = "📊 *Итоги недели*"
+        header = "📊 *Итоги недели — оценка выполнения обещаний*"
+        period = "за эту неделю"
     else:
-        prompt = (
-            f"Сегодня {today}. Сделай ежедневный дайджест задач: "
-            f"что сделано сегодня, что в работе, что просрочено, что запланировано на завтра. "
-            f"Укажи 1-2 приоритета на завтра. Кратко, структурированно, без воды."
-        )
-        header = "🌙 *Дайджест задач на конец дня*"
+        header = "🌙 *Дайджест — оценка выполнения обещаний*"
+        period = "за сегодня"
+
+    prompt = f"""Ты жёсткий, честный коуч топ-менеджера. Без корпоративного языка, без комплиментов. Только факты и прямая оценка.
+
+Сегодня {today}. Задачи (категория указана в скобках):
+{tasks_text}
+
+Сделай оценку выполнения обещаний по двум категориям.
+
+🏢 РАБОЧИЕ ЦЕЛИ
+1. Что было обещано (высокий приоритет или дедлайн ≤ сегодня, категория Работа)
+2. Что реально выполнено
+3. Что просрочено или зависло
+4. Оценка: X/10
+
+👤 ЛИЧНЫЕ ЦЕЛИ
+1. Что было обещано (высокий приоритет или дедлайн ≤ сегодня, категория Личное)
+2. Что реально выполнено
+3. Что просрочено или зависло
+4. Оценка: X/10
+
+📌 ИТОГО
+— Общая оценка: X/10
+— Главный паттерн: что системно не выполняется
+— Одна конкретная рекомендация на следующие 7 дней
+
+Шкала: 9-10 = отлично, 7-8 = хорошо, 5-6 = средне, ниже 5 = провал. Будь честным."""
 
     response = openai_client.chat.completions.create(
         model="gpt-4o",
         messages=[
             {
                 "role": "system",
-                "content": "Ты помощник-менеджер задач топ-менеджера. Отвечай на русском, кратко, структурированно, без корпоративного языка."
+                "content": "Ты жёсткий честный коуч. Отвечай на русском, структурированно, без воды и лести."
             },
             {
                 "role": "user",
-                "content": f"{prompt}\n\nСписок задач:\n{tasks_text}"
+                "content": prompt
             }
         ]
     )
@@ -240,6 +261,7 @@ def index():
         priorities=PRIORITIES,
         energies=ENERGIES,
         recurrences=RECURRENCES,
+        categories=CATEGORIES,
         status_filter=status_filter,
         priority_filter=priority_filter,
         tag_filter=tag_filter,
@@ -262,15 +284,16 @@ def add():
     energy = request.form.get("energy", "Средняя")
     assignee = request.form.get("assignee", "").strip() or None
     recurrence = request.form.get("recurrence", "").strip() or None
+    category = request.form.get("category", "Работа")
 
     event_id = gcal.create_event(title, deadline, priority, project, assignee) if deadline else None
 
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO tasks (title, status, priority, deadline, project, energy, assignee, calendar_event_id, recurrence)"
-                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                (title, status, priority, deadline, project, energy, assignee, event_id, recurrence),
+                "INSERT INTO tasks (title, status, priority, deadline, project, energy, assignee, calendar_event_id, recurrence, category)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (title, status, priority, deadline, project, energy, assignee, event_id, recurrence, category),
             )
     return redirect(url_for("index"))
 
@@ -320,7 +343,8 @@ def edit(task_id):
             subtasks = cur.fetchall()
     return render_template("edit.html", task=task, subtasks=subtasks,
                            statuses=STATUSES, priorities=PRIORITIES, energies=ENERGIES,
-                           recurrences=RECURRENCES, today=date.today(), parse_tags=parse_tags)
+                           recurrences=RECURRENCES, categories=CATEGORIES,
+                           today=date.today(), parse_tags=parse_tags)
 
 
 @app.route("/edit/<int:task_id>", methods=["POST"])
@@ -337,6 +361,7 @@ def edit_save(task_id):
     assignee = request.form.get("assignee", "").strip() or None
     progress = request.form.get("progress", "").strip() or None
     recurrence = request.form.get("recurrence", "").strip() or None
+    category = request.form.get("category", "Работа")
 
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -367,10 +392,10 @@ def edit_save(task_id):
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE tasks SET title=%s, status=%s, priority=%s, deadline=%s, project=%s,"
-                " energy=%s, assignee=%s, progress=%s, calendar_event_id=%s, recurrence=%s, closed_at=%s"
-                " WHERE id=%s",
+                " energy=%s, assignee=%s, progress=%s, calendar_event_id=%s, recurrence=%s,"
+                " closed_at=%s, category=%s WHERE id=%s",
                 (title, status, priority, deadline, project, energy, assignee, progress,
-                 new_event_id, recurrence, closed_at, task_id),
+                 new_event_id, recurrence, closed_at, category, task_id),
             )
     return redirect(url_for("index"))
 
@@ -415,7 +440,8 @@ def voice():
                     "description (краткое описание или контекст задачи, строка или null), "
                     "project (название проекта или направления, строка или null), "
                     "energy (одно из: Лёгкая, Средняя, Тяжёлая — оцени по сложности задачи), "
-                    "assignee (кто должен сделать задачу, строка или null). "
+                    "assignee (кто должен сделать задачу, строка или null), "
+                    "category (одно из: Работа, Личное — определи по смыслу задачи). "
                     "Если приоритет не упомянут — Средний. Если статус не упомянут — Новая. "
                     "Если энергия не упомянута — оцени самостоятельно по смыслу задачи."
                 )
