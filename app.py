@@ -9,6 +9,7 @@ from openai import OpenAI
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import pytz
+import gcal
 
 app = Flask(__name__)
 DATABASE_URL = (
@@ -54,6 +55,7 @@ def init_db():
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS tags TEXT")
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee TEXT")
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS progress TEXT")
+            cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS calendar_event_id TEXT")
 
 
 def send_telegram(text):
@@ -222,11 +224,14 @@ def add():
     energy = request.form.get("energy", "Средняя")
     assignee = request.form.get("assignee", "").strip() or None
 
+    event_id = gcal.create_event(title, deadline, priority, project, assignee) if deadline else None
+
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO tasks (title, status, priority, deadline, project, energy, assignee) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (title, status, priority, deadline, project, energy, assignee),
+                "INSERT INTO tasks (title, status, priority, deadline, project, energy, assignee, calendar_event_id)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                (title, status, priority, deadline, project, energy, assignee, event_id),
             )
     return redirect(url_for("index"))
 
@@ -266,10 +271,29 @@ def edit_save(task_id):
     progress = request.form.get("progress", "").strip() or None
 
     with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT calendar_event_id FROM tasks WHERE id=%s", (task_id,))
+            row = cur.fetchone()
+
+    existing_event_id = row["calendar_event_id"] if row else None
+    new_event_id = existing_event_id
+
+    if deadline:
+        if existing_event_id:
+            gcal.update_event(existing_event_id, title, deadline, priority, project, assignee)
+        else:
+            new_event_id = gcal.create_event(title, deadline, priority, project, assignee)
+    else:
+        if existing_event_id:
+            gcal.delete_event(existing_event_id)
+            new_event_id = None
+
+    with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE tasks SET title=%s, status=%s, priority=%s, deadline=%s, project=%s, energy=%s, assignee=%s, progress=%s WHERE id=%s",
-                (title, status, priority, deadline, project, energy, assignee, progress, task_id),
+                "UPDATE tasks SET title=%s, status=%s, priority=%s, deadline=%s, project=%s,"
+                " energy=%s, assignee=%s, progress=%s, calendar_event_id=%s WHERE id=%s",
+                (title, status, priority, deadline, project, energy, assignee, progress, new_event_id, task_id),
             )
     return redirect(url_for("index"))
 
@@ -277,7 +301,11 @@ def edit_save(task_id):
 @app.route("/delete/<int:task_id>", methods=["POST"])
 def delete(task_id):
     with get_db() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT calendar_event_id FROM tasks WHERE id=%s", (task_id,))
+            row = cur.fetchone()
+            if row and row["calendar_event_id"]:
+                gcal.delete_event(row["calendar_event_id"])
             cur.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
     return redirect(url_for("index"))
 
@@ -403,19 +431,26 @@ def process_bot_message(text):
 
     if result.get("action") == "add_task" and result.get("task"):
         t = result["task"]
-        tags = normalize_tags(t.get("tags", ""))
+        title = t.get("title", "Без названия")
+        deadline = t.get("deadline") or None
+        priority = t.get("priority", "Средний")
+        project = t.get("project") or None
+        assignee = t.get("assignee") or None
+        event_id = gcal.create_event(title, deadline, priority, project, assignee) if deadline else None
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO tasks (title, status, priority, deadline, project, energy, assignee) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                    "INSERT INTO tasks (title, status, priority, deadline, project, energy, assignee, calendar_event_id)"
+                    " VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
                     (
-                        t.get("title", "Без названия"),
+                        title,
                         t.get("status", "Новая"),
-                        t.get("priority", "Средний"),
-                        t.get("deadline") or None,
-                        t.get("project") or None,
+                        priority,
+                        deadline,
+                        project,
                         t.get("energy", "Средняя"),
-                        t.get("assignee") or None,
+                        assignee,
+                        event_id,
                     )
                 )
         return result.get("text", "✅ Задача добавлена")
