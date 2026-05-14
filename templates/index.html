@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Таск-менеджер</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#0071e3">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Задачи">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -637,6 +644,11 @@ async function sendAudio() {
         statusEl.textContent = "Готово — проверьте поля и нажмите «Добавить»";
     } catch(e) { statusEl.textContent = "Ошибка обработки"; }
     finally { btn.disabled = false; }
+}
+
+// ── Service Worker ─────────────────────────────────────────
+if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/static/sw.js");
 }
 </script>
 </body>

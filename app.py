@@ -1,7 +1,7 @@
 import os
 import json
 import requests
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory
 import psycopg2
 import psycopg2.extras
 from datetime import date
@@ -607,6 +607,11 @@ def analyze():
 
     summary = response.choices[0].message.content
     return jsonify({"summary": summary})
+
+
+@app.route("/static/sw.js")
+def service_worker():
+    return send_from_directory("static", "sw.js", mimetype="application/javascript")
 
 
 @app.route("/health")
