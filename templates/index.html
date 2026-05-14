@@ -16,7 +16,7 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
-            background: #f5f5f7;
+            background: #e8e9ec url('/static/bg.svg') center center / cover fixed;
             color: #1d1d1f;
             min-height: 100vh;
             padding: 0 0 60px;
@@ -283,7 +283,7 @@
         /* ── Responsive ──────────────────────────────────────── */
         @media (max-width: 900px) {
             th:first-child, td:first-child { display: none; }
-            th:nth-child(9), td:nth-child(9) { display: none; }
+            th:nth-child(8), td:nth-child(8) { display: none; }
         }
 
         @media (max-width: 768px) {
@@ -319,9 +319,9 @@
                 font-size: 0.85rem;
             }
             th:first-child, td:first-child,
-            th:nth-child(9), td:nth-child(9) { display: flex; }
+            th:nth-child(8), td:nth-child(8) { display: flex; }
             table td:first-child  { display: none; }
-            table td:nth-child(9) { display: none; }
+            table td:nth-child(8) { display: none; }
             table td:last-child { border-bottom: none; padding-top: 8px; }
             table td[data-label]::before {
                 content: attr(data-label);
@@ -414,10 +414,6 @@
         </div>
         <div class="add-form-row2">
             <div class="field">
-                <label>Проект / направление</label>
-                <input type="text" name="project" id="fieldProject" placeholder="например: Стратегия 2026, Билайн Восток...">
-            </div>
-            <div class="field">
                 <label>Исполнитель</label>
                 <input type="text" name="assignee" id="fieldAssignee" placeholder="Кто должен сделать...">
             </div>
@@ -489,7 +485,6 @@
             <tr>
                 <th>#</th>
                 <th>Задача</th>
-                <th>Проект</th>
                 <th>Исполнитель</th>
                 <th>Приоритет</th>
                 <th>Усилия</th>
@@ -500,15 +495,15 @@
             </tr>
         </thead>
         <tbody>
-        {% set ns = namespace(cur_project='__none__') %}
+        {% set ns = namespace(cur_cat='__none__') %}
         {% for task in tasks %}
-            {% set proj = task.project or '' %}
-            {% if proj != ns.cur_project %}
-                {% set ns.cur_project = proj %}
+            {% set cat = task.category or '' %}
+            {% if cat != ns.cur_cat %}
+                {% set ns.cur_cat = cat %}
                 {% set group_id = loop.index %}
                 <tr class="group-header" onclick="toggleGroup({{ group_id }})">
-                    <td colspan="10">
-                        {{ task.project or '— Без проекта' }}
+                    <td colspan="9">
+                        {{ '🏢 Работа' if task.category == 'Работа' else ('👤 Личное' if task.category == 'Личное' else '— Без категории') }}
                         <span class="group-toggle" id="toggle-{{ group_id }}">▼</span>
                     </td>
                 </tr>
@@ -533,13 +528,6 @@
                         </div>
                         <span class="subtask-count">{{ task.subtask_done }}/{{ task.subtask_total }}</span>
                     </div>
-                    {% endif %}
-                </td>
-                <td data-label="Проект">
-                    {% if task.project %}
-                    <span class="task-project">{{ task.project }}</span>
-                    {% else %}
-                    <span class="date-text">—</span>
                     {% endif %}
                 </td>
                 <td data-label="Исполнитель">

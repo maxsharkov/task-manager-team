@@ -9,7 +9,7 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
-            background: #f5f5f7;
+            background: #e8e9ec url('/static/bg.svg') center center / cover fixed;
             color: #1d1d1f;
             min-height: 100vh;
             padding: 0 0 60px;
@@ -30,17 +30,8 @@
             top: 0;
             z-index: 100;
         }
-        .site-header h1 {
-            font-size: 1.05rem;
-            font-weight: 600;
-            letter-spacing: -0.01em;
-            color: #1d1d1f;
-        }
-        .header-id {
-            font-size: 0.82rem;
-            color: #6e6e73;
-            font-weight: 400;
-        }
+        .site-header h1 { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
+        .header-id { font-size: 0.82rem; color: #6e6e73; font-weight: 400; }
 
         .container { max-width: 680px; margin: 0 auto; padding: 32px 24px; }
 
@@ -55,7 +46,6 @@
         }
 
         .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; }
-        .field:last-of-type { margin-bottom: 0; }
 
         label {
             font-size: 0.72rem;
@@ -117,6 +107,48 @@
         }
         .btn-cancel:hover { background: rgba(0,0,0,0.1); opacity: 1; }
 
+        .divider { border: none; border-top: 1px solid rgba(0,0,0,0.06); margin: 24px 0 20px; }
+
+        .section-label {
+            font-size: 0.72rem; font-weight: 700; color: #6e6e73;
+            text-transform: uppercase; letter-spacing: 0.04em;
+            margin-bottom: 16px;
+        }
+        .section-label span {
+            font-weight: 400; text-transform: none; letter-spacing: 0;
+            margin-left: 8px; color: #0071e3;
+        }
+
+        .subtask-row {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+        .subtask-row:last-of-type { border-bottom: none; }
+        .subtask-check {
+            width: 20px; height: 20px; border-radius: 50%; cursor: pointer;
+            padding: 0; flex-shrink: 0; border: none;
+        }
+        .subtask-text { flex: 1; font-size: 0.88rem; }
+        .subtask-text.done { text-decoration: line-through; color: #6e6e73; }
+        .subtask-del {
+            background: none; border: none; color: #ff3b30;
+            cursor: pointer; font-size: 0.8rem; padding: 2px 6px;
+            border-radius: 6px;
+        }
+        .subtask-del:hover { background: rgba(255,59,48,0.08); opacity: 1; }
+        .subtask-add-row { display: flex; gap: 10px; margin-top: 14px; }
+        .subtask-add-row input {
+            flex: 1; padding: 9px 13px;
+            border: 1px solid rgba(0,0,0,0.12); border-radius: 10px;
+            font-size: 0.88rem; font-family: inherit;
+            background: rgba(255,255,255,0.9);
+        }
+        .subtask-add-row button {
+            padding: 9px 18px; background: #0071e3; color: white;
+            border: none; border-radius: 980px; font-size: 0.88rem;
+            font-family: inherit; cursor: pointer; white-space: nowrap;
+        }
+
         @media (max-width: 640px) {
             .site-header { padding: 0 16px; }
             .container { padding: 16px 12px; }
@@ -137,6 +169,7 @@
 
 <div class="container">
 <div class="card">
+
     <form action="/edit/{{ task.id }}" method="post">
 
         <div class="field">
@@ -180,22 +213,17 @@
 
         <div class="row2">
             <div class="field">
-                <label>Проект / направление</label>
-                <input type="text" name="project" value="{{ task.project or '' }}" placeholder="например: Стратегия 2026...">
-            </div>
-            <div class="field">
                 <label>Исполнитель</label>
                 <input type="text" name="assignee" value="{{ task.assignee or '' }}" placeholder="Кто должен сделать...">
             </div>
-        </div>
-
-        <div class="field">
-            <label>Категория</label>
-            <select name="category">
-                {% for c in categories %}
-                <option value="{{ c }}" {% if c == task.category %}selected{% endif %}>{{ c }}</option>
-                {% endfor %}
-            </select>
+            <div class="field">
+                <label>Категория</label>
+                <select name="category">
+                    {% for c in categories %}
+                    <option value="{{ c }}" {% if c == task.category %}selected{% endif %}>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </div>
         </div>
 
         <div class="field">
@@ -218,40 +246,37 @@
             <a href="/" class="btn-cancel">Отмена</a>
         </div>
     </form>
-</div>
-</div>
 
-<!-- Подзадачи -->
-<div class="card" style="margin-top:16px;">
-    <div style="font-size:0.72rem; font-weight:700; color:#6e6e73; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:16px;">
+    <hr class="divider">
+
+    <div class="section-label">
         Подзадачи
         {% if subtasks %}
-        <span style="font-weight:400; text-transform:none; letter-spacing:0; margin-left:8px; color:#0071e3;">
-            {{ subtasks|selectattr('done')|list|length }}/{{ subtasks|length }} выполнено
-        </span>
+        <span>{{ subtasks|selectattr('done')|list|length }}/{{ subtasks|length }} выполнено</span>
         {% endif %}
     </div>
 
     {% for sub in subtasks %}
-    <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid rgba(0,0,0,0.05);">
+    <div class="subtask-row">
         <form action="/subtask/toggle/{{ sub.id }}" method="post" style="margin:0;">
-            <button type="submit" style="width:20px; height:20px; border-radius:50%; border:2px solid {% if sub.done %}#34c759{% else %}rgba(0,0,0,0.2){% endif %}; background:{% if sub.done %}#34c759{% else %}transparent{% endif %}; cursor:pointer; padding:0; flex-shrink:0;"></button>
+            <button type="submit" class="subtask-check"
+                style="border: 2px solid {% if sub.done %}#34c759{% else %}rgba(0,0,0,0.2){% endif %};
+                       background: {% if sub.done %}#34c759{% else %}transparent{% endif %};"></button>
         </form>
-        <span style="flex:1; font-size:0.88rem; {% if sub.done %}text-decoration:line-through; color:#6e6e73;{% endif %}">{{ sub.text }}</span>
+        <span class="subtask-text {% if sub.done %}done{% endif %}">{{ sub.text }}</span>
         <form action="/subtask/delete/{{ sub.id }}" method="post" style="margin:0;">
-            <button type="submit" style="background:none; border:none; color:#ff3b30; cursor:pointer; font-size:0.8rem; padding:2px 6px;">✕</button>
+            <button type="submit" class="subtask-del">✕</button>
         </form>
     </div>
     {% endfor %}
 
-    <form action="/subtask/add" method="post" style="display:flex; gap:10px; margin-top:14px;">
+    <form action="/subtask/add" method="post" class="subtask-add-row">
         <input type="hidden" name="task_id" value="{{ task.id }}">
-        <input type="text" name="text" placeholder="Новая подзадача..." required
-               style="flex:1; padding:9px 13px; border:1px solid rgba(0,0,0,0.12); border-radius:10px; font-size:0.88rem; font-family:inherit; background:rgba(255,255,255,0.9);">
-        <button type="submit" style="padding:9px 18px; background:#0071e3; color:white; border:none; border-radius:980px; font-size:0.88rem; font-family:inherit; cursor:pointer; white-space:nowrap;">+ Добавить</button>
+        <input type="text" name="text" placeholder="Новая подзадача..." required>
+        <button type="submit">+ Добавить</button>
     </form>
-</div>
 
+</div>
 </div>
 
 </body>

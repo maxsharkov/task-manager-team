@@ -105,7 +105,7 @@ def build_digest(digest_type="daily"):
 
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT title, status, priority, deadline, project, energy, category, closed_at FROM tasks ORDER BY created_at")
+            cur.execute("SELECT title, status, priority, deadline, energy, category, closed_at, progress, assignee FROM tasks ORDER BY created_at")
             tasks = cur.fetchall()
 
     if not tasks:
@@ -116,7 +116,8 @@ def build_digest(digest_type="daily"):
         f"- [{t['category'] or '?'}] «{t['title']}» | {t['status']} | {t['priority']}"
         f" | дедлайн: {t['deadline'] or 'не указан'}"
         + (f" | закрыта: {t['closed_at']}" if t['closed_at'] else "")
-        + (f" | проект: {t['project']}" if t['project'] else "")
+        + (f" | исполнитель: {t['assignee']}" if t['assignee'] else "")
+        + (f" | прогресс: {t['progress']}" if t['progress'] else "")
         for t in tasks
     ])
 
@@ -244,7 +245,7 @@ def index():
     query += """
         GROUP BY t.id
         ORDER BY
-            t.project NULLS LAST,
+            t.category NULLS LAST,
             CASE t.priority WHEN 'Высокий' THEN 1 WHEN 'Средний' THEN 2 ELSE 3 END,
             t.deadline ASC NULLS LAST
     """
@@ -286,14 +287,14 @@ def add():
     recurrence = request.form.get("recurrence", "").strip() or None
     category = request.form.get("category", "Работа")
 
-    event_id = gcal.create_event(title, deadline, priority, project, assignee) if deadline else None
+    event_id = gcal.create_event(title, deadline, priority, None, assignee) if deadline else None
 
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO tasks (title, status, priority, deadline, project, energy, assignee, calendar_event_id, recurrence, category)"
-                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                (title, status, priority, deadline, project, energy, assignee, event_id, recurrence, category),
+                "INSERT INTO tasks (title, status, priority, deadline, energy, assignee, calendar_event_id, recurrence, category)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (title, status, priority, deadline, energy, assignee, event_id, recurrence, category),
             )
     return redirect(url_for("index"))
 
@@ -356,7 +357,6 @@ def edit_save(task_id):
     status = request.form.get("status", "Новая")
     priority = request.form.get("priority", "Средний")
     deadline = request.form.get("deadline") or None
-    project = request.form.get("project", "").strip() or None
     energy = request.form.get("energy", "Средняя")
     assignee = request.form.get("assignee", "").strip() or None
     progress = request.form.get("progress", "").strip() or None

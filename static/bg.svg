@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e4e5e9"/>
+      <stop offset="45%" stop-color="#f0f0f4"/>
+      <stop offset="100%" stop-color="#e6e7eb"/>
+    </linearGradient>
+    <pattern id="dots" x="0" y="0" width="18" height="18" patternUnits="userSpaceOnUse">
+      <circle cx="1.5" cy="1.5" r="1.2" fill="#b8bac4" opacity="0.45"/>
+    </pattern>
+  </defs>
+
+  <rect width="1440" height="900" fill="url(#bg)"/>
+
+  <!-- Dot grids -->
+  <rect x="0" y="0" width="220" height="220" fill="url(#dots)"/>
+  <rect x="1220" y="680" width="220" height="220" fill="url(#dots)"/>
+  <rect x="980" y="0" width="120" height="100" fill="url(#dots)" opacity="0.5"/>
+
+  <!-- Main diagonal parallelograms -->
+  <polygon points="160,900 480,0 660,0 340,900" fill="rgba(255,255,255,0.28)"/>
+  <polygon points="460,900 750,0 900,0 610,900" fill="rgba(255,255,255,0.20)"/>
+  <polygon points="740,900 1010,0 1130,0 860,900" fill="rgba(255,255,255,0.24)"/>
+  <polygon points="1020,900 1270,0 1380,0 1130,900" fill="rgba(255,255,255,0.16)"/>
+  <polygon points="1260,900 1440,380 1440,120 1360,900" fill="rgba(255,255,255,0.12)"/>
+  <polygon points="-60,900 200,0 340,0 80,900" fill="rgba(255,255,255,0.14)"/>
+
+  <!-- Thin accent lines -->
+  <line x1="340" y1="900" x2="620" y2="0" stroke="rgba(255,255,255,0.55)" stroke-width="1.5"/>
+  <line x1="860" y1="900" x2="1120" y2="0" stroke="rgba(255,255,255,0.45)" stroke-width="1.5"/>
+  <line x1="80" y1="900" x2="300" y2="0" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>
+  <line x1="1130" y1="900" x2="1360" y2="0" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>
+
+  <!-- Small accent shapes right side -->
+  <polygon points="1340,320 1400,160 1440,160 1440,320" fill="rgba(255,255,255,0.12)"/>
+  <polygon points="1260,580 1380,300 1440,300 1440,520 1340,580" fill="rgba(255,255,255,0.08)"/>
+
+  <!-- Highlight glow center -->
+  <ellipse cx="720" cy="380" rx="500" ry="320" fill="rgba(255,255,255,0.12)"/>
+</svg>
