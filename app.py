@@ -4,7 +4,8 @@ import requests
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory
 import psycopg2
 import psycopg2.extras
-from datetime import date
+from datetime import date, timedelta
+import calendar
 from openai import OpenAI
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -27,6 +28,23 @@ NSK = pytz.timezone("Asia/Novosibirsk")
 STATUSES = ["Новая", "В работе", "Завершена"]
 PRIORITIES = ["Низкий", "Средний", "Высокий"]
 ENERGIES = ["Лёгкая", "Средняя", "Тяжёлая"]
+RECURRENCES = ["Ежедневно", "Еженедельно", "Ежемесячно"]
+
+
+def calc_next_deadline(deadline, recurrence):
+    if not deadline or not recurrence:
+        return None
+    dl = date.fromisoformat(str(deadline))
+    if recurrence == "Ежедневно":
+        return dl + timedelta(days=1)
+    if recurrence == "Еженедельно":
+        return dl + timedelta(weeks=1)
+    if recurrence == "Ежемесячно":
+        month = dl.month % 12 + 1
+        year = dl.year + (dl.month // 12)
+        day = min(dl.day, calendar.monthrange(year, month)[1])
+        return date(year, month, day)
+    return None
 
 
 def get_db():
@@ -56,6 +74,16 @@ def init_db():
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee TEXT")
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS progress TEXT")
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS calendar_event_id TEXT")
+            cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence TEXT")
+            cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS closed_at DATE")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS subtasks (
+                    id SERIAL PRIMARY KEY,
+                    task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+                    text TEXT NOT NULL,
+                    done BOOLEAN DEFAULT FALSE
+                )
+            """)
 
 
 def send_telegram(text):
@@ -169,26 +197,35 @@ def index():
     tag_filter = request.args.get("tag", "")
     search_query = request.args.get("q", "").strip()
 
-    query = "SELECT * FROM tasks WHERE 1=1"
+    query = """
+        SELECT t.*,
+            COUNT(s.id) AS subtask_total,
+            COUNT(s.id) FILTER (WHERE s.done) AS subtask_done
+        FROM tasks t
+        LEFT JOIN subtasks s ON s.task_id = t.id
+        WHERE 1=1
+    """
     params = []
 
     if status_filter:
-        query += " AND status = %s"
+        query += " AND t.status = %s"
         params.append(status_filter)
     if priority_filter:
-        query += " AND priority = %s"
+        query += " AND t.priority = %s"
         params.append(priority_filter)
     if tag_filter:
-        query += " AND tags ILIKE %s"
+        query += " AND t.tags ILIKE %s"
         params.append(f"%{tag_filter}%")
     if search_query:
-        query += " AND (title ILIKE %s OR description ILIKE %s OR project ILIKE %s OR tags ILIKE %s)"
-        params.extend([f"%{search_query}%"] * 4)
+        query += " AND (t.title ILIKE %s OR t.project ILIKE %s OR t.assignee ILIKE %s)"
+        params.extend([f"%{search_query}%"] * 3)
 
     query += """
+        GROUP BY t.id
         ORDER BY
-            CASE priority WHEN 'Высокий' THEN 1 WHEN 'Средний' THEN 2 ELSE 3 END,
-            deadline ASC NULLS LAST
+            t.project NULLS LAST,
+            CASE t.priority WHEN 'Высокий' THEN 1 WHEN 'Средний' THEN 2 ELSE 3 END,
+            t.deadline ASC NULLS LAST
     """
 
     with get_db() as conn:
@@ -202,6 +239,7 @@ def index():
         statuses=STATUSES,
         priorities=PRIORITIES,
         energies=ENERGIES,
+        recurrences=RECURRENCES,
         status_filter=status_filter,
         priority_filter=priority_filter,
         tag_filter=tag_filter,
@@ -223,15 +261,16 @@ def add():
     project = request.form.get("project", "").strip() or None
     energy = request.form.get("energy", "Средняя")
     assignee = request.form.get("assignee", "").strip() or None
+    recurrence = request.form.get("recurrence", "").strip() or None
 
     event_id = gcal.create_event(title, deadline, priority, project, assignee) if deadline else None
 
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO tasks (title, status, priority, deadline, project, energy, assignee, calendar_event_id)"
-                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                (title, status, priority, deadline, project, energy, assignee, event_id),
+                "INSERT INTO tasks (title, status, priority, deadline, project, energy, assignee, calendar_event_id, recurrence)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (title, status, priority, deadline, project, energy, assignee, event_id, recurrence),
             )
     return redirect(url_for("index"))
 
@@ -240,8 +279,30 @@ def add():
 def update(task_id):
     status = request.form.get("status")
     with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("UPDATE tasks SET status = %s WHERE id = %s", (status, task_id))
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT * FROM tasks WHERE id=%s", (task_id,))
+            task = cur.fetchone()
+            if not task:
+                return redirect(url_for("index"))
+
+            was_completed = task["status"] == "Завершена"
+            now_completed = status == "Завершена"
+            closed_at = date.today() if now_completed else None
+
+            cur.execute("UPDATE tasks SET status=%s, closed_at=%s WHERE id=%s",
+                        (status, closed_at, task_id))
+
+            if now_completed and not was_completed and task["recurrence"]:
+                next_dl = calc_next_deadline(task["deadline"], task["recurrence"])
+                event_id = gcal.create_event(task["title"], next_dl, task["priority"],
+                                             task["project"], task["assignee"]) if next_dl else None
+                cur.execute(
+                    "INSERT INTO tasks (title, status, priority, deadline, project, energy,"
+                    " assignee, recurrence, calendar_event_id)"
+                    " VALUES (%s,'Новая',%s,%s,%s,%s,%s,%s,%s)",
+                    (task["title"], task["priority"], next_dl, task["project"],
+                     task["energy"], task["assignee"], task["recurrence"], event_id)
+                )
     return redirect(url_for("index"))
 
 
@@ -253,7 +314,13 @@ def edit(task_id):
             task = cur.fetchone()
     if not task:
         return redirect(url_for("index"))
-    return render_template("edit.html", task=task, statuses=STATUSES, priorities=PRIORITIES, energies=ENERGIES, today=date.today(), parse_tags=parse_tags)
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT * FROM subtasks WHERE task_id=%s ORDER BY id", (task_id,))
+            subtasks = cur.fetchall()
+    return render_template("edit.html", task=task, subtasks=subtasks,
+                           statuses=STATUSES, priorities=PRIORITIES, energies=ENERGIES,
+                           recurrences=RECURRENCES, today=date.today(), parse_tags=parse_tags)
 
 
 @app.route("/edit/<int:task_id>", methods=["POST"])
@@ -269,10 +336,11 @@ def edit_save(task_id):
     energy = request.form.get("energy", "Средняя")
     assignee = request.form.get("assignee", "").strip() or None
     progress = request.form.get("progress", "").strip() or None
+    recurrence = request.form.get("recurrence", "").strip() or None
 
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT calendar_event_id FROM tasks WHERE id=%s", (task_id,))
+            cur.execute("SELECT calendar_event_id, status, closed_at FROM tasks WHERE id=%s", (task_id,))
             row = cur.fetchone()
 
     existing_event_id = row["calendar_event_id"] if row else None
@@ -288,12 +356,21 @@ def edit_save(task_id):
             gcal.delete_event(existing_event_id)
             new_event_id = None
 
+    closed_at = None
+    if row:
+        if status == "Завершена" and row["status"] != "Завершена":
+            closed_at = date.today()
+        elif status == "Завершена":
+            closed_at = row["closed_at"]
+
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE tasks SET title=%s, status=%s, priority=%s, deadline=%s, project=%s,"
-                " energy=%s, assignee=%s, progress=%s, calendar_event_id=%s WHERE id=%s",
-                (title, status, priority, deadline, project, energy, assignee, progress, new_event_id, task_id),
+                " energy=%s, assignee=%s, progress=%s, calendar_event_id=%s, recurrence=%s, closed_at=%s"
+                " WHERE id=%s",
+                (title, status, priority, deadline, project, energy, assignee, progress,
+                 new_event_id, recurrence, closed_at, task_id),
             )
     return redirect(url_for("index"))
 
@@ -607,6 +684,90 @@ def analyze():
 
     summary = response.choices[0].message.content
     return jsonify({"summary": summary})
+
+
+@app.route("/subtask/add", methods=["POST"])
+def subtask_add():
+    task_id = request.form.get("task_id", type=int)
+    text = request.form.get("text", "").strip()
+    if task_id and text:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("INSERT INTO subtasks (task_id, text) VALUES (%s, %s)", (task_id, text))
+    return redirect(url_for("edit", task_id=task_id))
+
+
+@app.route("/subtask/toggle/<int:sub_id>", methods=["POST"])
+def subtask_toggle(sub_id):
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT task_id, done FROM subtasks WHERE id=%s", (sub_id,))
+            row = cur.fetchone()
+            if row:
+                cur.execute("UPDATE subtasks SET done=%s WHERE id=%s", (not row["done"], sub_id))
+                return redirect(url_for("edit", task_id=row["task_id"]))
+    return redirect(url_for("index"))
+
+
+@app.route("/subtask/delete/<int:sub_id>", methods=["POST"])
+def subtask_delete(sub_id):
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT task_id FROM subtasks WHERE id=%s", (sub_id,))
+            row = cur.fetchone()
+            cur.execute("DELETE FROM subtasks WHERE id=%s", (sub_id,))
+            if row:
+                return redirect(url_for("edit", task_id=row["task_id"]))
+    return redirect(url_for("index"))
+
+
+@app.route("/dashboard")
+def dashboard():
+    today = date.today()
+    week_ago = today - timedelta(days=7)
+    month_ago = today - timedelta(days=30)
+
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT status, COUNT(*) AS cnt FROM tasks GROUP BY status")
+            by_status = {r["status"]: r["cnt"] for r in cur.fetchall()}
+
+            cur.execute("SELECT priority, COUNT(*) AS cnt FROM tasks WHERE status != 'Завершена' GROUP BY priority")
+            by_priority = {r["priority"]: r["cnt"] for r in cur.fetchall()}
+
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status='Завершена' AND closed_at >= %s", (week_ago,))
+            closed_7 = cur.fetchone()["cnt"]
+
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status='Завершена' AND closed_at >= %s", (month_ago,))
+            closed_30 = cur.fetchone()["cnt"]
+
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE deadline < %s AND status != 'Завершена'", (today,))
+            overdue = cur.fetchone()["cnt"]
+
+            cur.execute("""
+                SELECT project, COUNT(*) AS cnt
+                FROM tasks WHERE status != 'Завершена' AND project IS NOT NULL
+                GROUP BY project ORDER BY cnt DESC LIMIT 8
+            """)
+            by_project = cur.fetchall()
+
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status != 'Завершена'")
+            open_total = cur.fetchone()["cnt"]
+
+            cur.execute("SELECT ROUND(AVG(CURRENT_DATE - created_at)) AS avg_age FROM tasks WHERE status != 'Завершена'")
+            avg_age = cur.fetchone()["avg_age"] or 0
+
+    return render_template("dashboard.html",
+        by_status=by_status,
+        by_priority=by_priority,
+        closed_7=closed_7,
+        closed_30=closed_30,
+        overdue=overdue,
+        by_project=by_project,
+        open_total=open_total,
+        avg_age=int(avg_age),
+        today=today,
+    )
 
 
 @app.route("/static/sw.js")

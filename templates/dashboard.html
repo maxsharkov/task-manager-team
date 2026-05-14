@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Дашборд</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
+            background: #f5f5f7;
+            color: #1d1d1f;
+            min-height: 100vh;
+            padding: 0 0 60px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .site-header {
+            background: rgba(255,255,255,0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            padding: 0 32px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .site-header h1 { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
+        .site-header a { margin-left: auto; font-size: 0.85rem; color: #0071e3; text-decoration: none; font-weight: 500; }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+
+        .section-title {
+            font-size: 0.72rem; font-weight: 700; color: #6e6e73;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            margin-bottom: 14px; margin-top: 28px;
+        }
+        .section-title:first-child { margin-top: 0; }
+
+        /* ── Stat grid ── */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 14px;
+            margin-bottom: 8px;
+        }
+        .stat-card {
+            background: rgba(255,255,255,0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            border-radius: 18px;
+            padding: 20px;
+            border: 1px solid rgba(0,0,0,0.06);
+            box-shadow: 0 2px 16px rgba(0,0,0,0.05);
+        }
+        .stat-label { font-size: 0.72rem; font-weight: 600; color: #6e6e73; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
+        .stat-value { font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; color: #1d1d1f; }
+        .stat-value.red   { color: #ff3b30; }
+        .stat-value.green { color: #34c759; }
+        .stat-value.blue  { color: #0071e3; }
+        .stat-value.purple { color: #5e5ce6; }
+        .stat-sub { font-size: 0.75rem; color: #6e6e73; margin-top: 4px; }
+
+        /* ── Distribution bars ── */
+        .dist-card {
+            background: rgba(255,255,255,0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            border-radius: 18px;
+            padding: 22px 24px;
+            border: 1px solid rgba(0,0,0,0.06);
+            box-shadow: 0 2px 16px rgba(0,0,0,0.05);
+        }
+        .dist-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+        .dist-row:last-child { margin-bottom: 0; }
+        .dist-name { font-size: 0.85rem; min-width: 110px; color: #1d1d1f; }
+        .dist-bar-wrap { flex: 1; height: 6px; background: rgba(0,0,0,0.07); border-radius: 3px; overflow: hidden; }
+        .dist-bar { height: 100%; border-radius: 3px; }
+        .dist-count { font-size: 0.82rem; color: #6e6e73; min-width: 28px; text-align: right; font-weight: 600; }
+
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+        @media (max-width: 640px) {
+            .site-header { padding: 0 16px; }
+            .container { padding: 16px 12px; }
+            .two-col { grid-template-columns: 1fr; }
+            .stat-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+
+<header class="site-header">
+    <h1>Дашборд</h1>
+    <a href="/">← Задачи</a>
+</header>
+
+<div class="container">
+
+    <div class="section-title">Общая картина</div>
+    <div class="stat-grid">
+        <div class="stat-card">
+            <div class="stat-label">Открытых задач</div>
+            <div class="stat-value blue">{{ open_total }}</div>
+            <div class="stat-sub">всего активных</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Завершено</div>
+            <div class="stat-value green">{{ by_status.get('Завершена', 0) }}</div>
+            <div class="stat-sub">всего закрыто</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Закрыто за 7 дней</div>
+            <div class="stat-value {% if closed_7 > 0 %}green{% endif %}">{{ closed_7 }}</div>
+            <div class="stat-sub">за последнюю неделю</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Закрыто за 30 дней</div>
+            <div class="stat-value purple">{{ closed_30 }}</div>
+            <div class="stat-sub">за последний месяц</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Просрочено</div>
+            <div class="stat-value {% if overdue > 0 %}red{% endif %}">{{ overdue }}</div>
+            <div class="stat-sub">дедлайн прошёл</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Средний возраст</div>
+            <div class="stat-value {% if avg_age > 14 %}red{% elif avg_age > 7 %}purple{% endif %}">{{ avg_age }}</div>
+            <div class="stat-sub">дней в работе</div>
+        </div>
+    </div>
+
+    <div class="section-title">Распределение</div>
+    <div class="two-col">
+
+        <div class="dist-card">
+            <div class="stat-label" style="margin-bottom:16px;">По статусу</div>
+            {% set total_all = (by_status.get('Новая',0) + by_status.get('В работе',0) + by_status.get('Завершена',0)) or 1 %}
+            {% for s, color in [('Новая','#0071e3'), ('В работе','#ff9500'), ('Завершена','#34c759')] %}
+            {% set cnt = by_status.get(s, 0) %}
+            <div class="dist-row">
+                <span class="dist-name">{{ s }}</span>
+                <div class="dist-bar-wrap">
+                    <div class="dist-bar" style="width:{{ (cnt / total_all * 100)|int }}%; background:{{ color }};"></div>
+                </div>
+                <span class="dist-count">{{ cnt }}</span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="dist-card">
+            <div class="stat-label" style="margin-bottom:16px;">По приоритету (открытые)</div>
+            {% set total_p = (by_priority.get('Высокий',0) + by_priority.get('Средний',0) + by_priority.get('Низкий',0)) or 1 %}
+            {% for p, color in [('Высокий','#ff3b30'), ('Средний','#ff9500'), ('Низкий','#34c759')] %}
+            {% set cnt = by_priority.get(p, 0) %}
+            <div class="dist-row">
+                <span class="dist-name">{{ p }}</span>
+                <div class="dist-bar-wrap">
+                    <div class="dist-bar" style="width:{{ (cnt / total_p * 100)|int }}%; background:{{ color }};"></div>
+                </div>
+                <span class="dist-count">{{ cnt }}</span>
+            </div>
+            {% endfor %}
+        </div>
+
+    </div>
+
+    {% if by_project %}
+    <div class="section-title">Топ проектов (открытые задачи)</div>
+    <div class="dist-card">
+        {% set max_p = by_project[0].cnt %}
+        {% for row in by_project %}
+        <div class="dist-row">
+            <span class="dist-name" style="min-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ row.project }}</span>
+            <div class="dist-bar-wrap">
+                <div class="dist-bar" style="width:{{ (row.cnt / max_p * 100)|int }}%; background:#0071e3;"></div>
+            </div>
+            <span class="dist-count">{{ row.cnt }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+</div>
+</body>
+</html>

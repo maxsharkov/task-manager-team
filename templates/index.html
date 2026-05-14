@@ -244,6 +244,40 @@
         tr.ai-match td { background: rgba(94,92,230,0.05) !important; }
         tr.ai-no-match { opacity: 0.3; }
 
+        /* ── Project groups ──────────────────────────────────── */
+        tr.group-header td {
+            background: rgba(0,0,0,0.025);
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #6e6e73;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 8px 14px;
+            cursor: pointer;
+            user-select: none;
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+        }
+        tr.group-header:hover td { background: rgba(0,0,0,0.04); }
+        .group-toggle { float: right; font-size: 0.65rem; opacity: 0.5; }
+        .group-overdue { color: #ff3b30; margin-left: 8px; font-size: 0.7rem; }
+
+        /* ── Subtask progress ────────────────────────────────── */
+        .subtask-progress {
+            display: flex; align-items: center; gap: 6px; margin-top: 4px;
+        }
+        .subtask-bar-wrap {
+            flex: 1; max-width: 80px; height: 3px;
+            background: rgba(0,0,0,0.1); border-radius: 2px; overflow: hidden;
+        }
+        .subtask-bar-fill { height: 100%; background: #34c759; border-radius: 2px; }
+        .subtask-count { font-size: 0.7rem; color: #6e6e73; white-space: nowrap; }
+
+        /* ── Recurrence badge ────────────────────────────────── */
+        .recurrence-badge {
+            font-size: 0.68rem; color: #5e5ce6; font-weight: 600;
+            margin-left: 6px; vertical-align: middle;
+        }
+
         /* ── Responsive ──────────────────────────────────────── */
         @media (max-width: 900px) {
             th:first-child, td:first-child { display: none; }
@@ -306,6 +340,7 @@
 
 <header class="site-header">
     <h1>Таск-менеджер</h1>
+    <a href="/dashboard" style="margin-left:auto; font-size:0.85rem; color:#0071e3; text-decoration:none; font-weight:500;">📊 Дашборд</a>
 </header>
 
 <div class="container">
@@ -384,6 +419,15 @@
                 <label>Исполнитель</label>
                 <input type="text" name="assignee" id="fieldAssignee" placeholder="Кто должен сделать...">
             </div>
+            <div class="field">
+                <label>Повторение</label>
+                <select name="recurrence" id="fieldRecurrence">
+                    <option value="">Не повторяется</option>
+                    {% for r in recurrences %}
+                    <option value="{{ r }}">{{ r }}</option>
+                    {% endfor %}
+                </select>
+            </div>
         </div>
     </form>
 </div>
@@ -446,13 +490,36 @@
             </tr>
         </thead>
         <tbody>
+        {% set ns = namespace(cur_project='__none__') %}
         {% for task in tasks %}
-            <tr>
+            {% set proj = task.project or '' %}
+            {% if proj != ns.cur_project %}
+                {% set ns.cur_project = proj %}
+                {% set group_id = loop.index %}
+                <tr class="group-header" onclick="toggleGroup({{ group_id }})">
+                    <td colspan="10">
+                        {{ task.project or '— Без проекта' }}
+                        <span class="group-toggle" id="toggle-{{ group_id }}">▼</span>
+                    </td>
+                </tr>
+            {% endif %}
+            <tr data-group="{{ loop.index0 }}" data-gid="{{ group_id }}">
                 <td class="date-text">{{ task.id }}</td>
                 <td data-label="Задача">
-                    <div style="font-weight:500;">{{ task.title }}</div>
+                    <div style="font-weight:500;">
+                        {{ task.title }}
+                        {% if task.recurrence %}<span class="recurrence-badge">↻ {{ task.recurrence }}</span>{% endif %}
+                    </div>
                     {% if task.progress %}
                     <div class="task-progress">↳ {{ task.progress[:80] }}{% if task.progress|length > 80 %}…{% endif %}</div>
+                    {% endif %}
+                    {% if task.subtask_total %}
+                    <div class="subtask-progress">
+                        <div class="subtask-bar-wrap">
+                            <div class="subtask-bar-fill" style="width:{{ (task.subtask_done / task.subtask_total * 100)|int }}%"></div>
+                        </div>
+                        <span class="subtask-count">{{ task.subtask_done }}/{{ task.subtask_total }}</span>
+                    </div>
                     {% endif %}
                 </td>
                 <td data-label="Проект">
@@ -644,6 +711,17 @@ async function sendAudio() {
         statusEl.textContent = "Готово — проверьте поля и нажмите «Добавить»";
     } catch(e) { statusEl.textContent = "Ошибка обработки"; }
     finally { btn.disabled = false; }
+}
+
+// ── Group toggle ───────────────────────────────────────────
+const groupState = {};
+function toggleGroup(gid) {
+    const rows = document.querySelectorAll(`tr[data-gid="${gid}"]`);
+    const toggle = document.getElementById(`toggle-${gid}`);
+    const collapsed = groupState[gid];
+    rows.forEach(r => r.style.display = collapsed ? "" : "none");
+    if (toggle) toggle.textContent = collapsed ? "▼" : "▶";
+    groupState[gid] = !collapsed;
 }
 
 // ── Service Worker ─────────────────────────────────────────

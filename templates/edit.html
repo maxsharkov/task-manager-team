@@ -190,6 +190,16 @@
         </div>
 
         <div class="field">
+            <label>Повторение</label>
+            <select name="recurrence">
+                <option value="" {% if not task.recurrence %}selected{% endif %}>Не повторяется</option>
+                {% for r in recurrences %}
+                <option value="{{ r }}" {% if r == task.recurrence %}selected{% endif %}>{{ r }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="field">
             <label>Что сделано сейчас</label>
             <textarea name="progress" placeholder="Текущий прогресс, промежуточные результаты...">{{ task.progress or '' }}</textarea>
         </div>
@@ -200,6 +210,39 @@
         </div>
     </form>
 </div>
+</div>
+
+<!-- Подзадачи -->
+<div class="card" style="margin-top:16px;">
+    <div style="font-size:0.72rem; font-weight:700; color:#6e6e73; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:16px;">
+        Подзадачи
+        {% if subtasks %}
+        <span style="font-weight:400; text-transform:none; letter-spacing:0; margin-left:8px; color:#0071e3;">
+            {{ subtasks|selectattr('done')|list|length }}/{{ subtasks|length }} выполнено
+        </span>
+        {% endif %}
+    </div>
+
+    {% for sub in subtasks %}
+    <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid rgba(0,0,0,0.05);">
+        <form action="/subtask/toggle/{{ sub.id }}" method="post" style="margin:0;">
+            <button type="submit" style="width:20px; height:20px; border-radius:50%; border:2px solid {% if sub.done %}#34c759{% else %}rgba(0,0,0,0.2){% endif %}; background:{% if sub.done %}#34c759{% else %}transparent{% endif %}; cursor:pointer; padding:0; flex-shrink:0;"></button>
+        </form>
+        <span style="flex:1; font-size:0.88rem; {% if sub.done %}text-decoration:line-through; color:#6e6e73;{% endif %}">{{ sub.text }}</span>
+        <form action="/subtask/delete/{{ sub.id }}" method="post" style="margin:0;">
+            <button type="submit" style="background:none; border:none; color:#ff3b30; cursor:pointer; font-size:0.8rem; padding:2px 6px;">✕</button>
+        </form>
+    </div>
+    {% endfor %}
+
+    <form action="/subtask/add" method="post" style="display:flex; gap:10px; margin-top:14px;">
+        <input type="hidden" name="task_id" value="{{ task.id }}">
+        <input type="text" name="text" placeholder="Новая подзадача..." required
+               style="flex:1; padding:9px 13px; border:1px solid rgba(0,0,0,0.12); border-radius:10px; font-size:0.88rem; font-family:inherit; background:rgba(255,255,255,0.9);">
+        <button type="submit" style="padding:9px 18px; background:#0071e3; color:white; border:none; border-radius:980px; font-size:0.88rem; font-family:inherit; cursor:pointer; white-space:nowrap;">+ Добавить</button>
+    </form>
+</div>
+
 </div>
 
 </body>
