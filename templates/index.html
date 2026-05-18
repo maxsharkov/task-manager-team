@@ -741,12 +741,14 @@
         {% endif %}
         {% if week_key != ns.cur_week %}
             {% set ns.cur_week = week_key %}
-            {% if today.isocalendar()[1] == wk and today.year == yr %}
+            {% if not t.closed_at %}
+                <div class="done-week-header">Ранее</div>
+            {% elif today.isocalendar()[1] == wk and today.year == yr %}
                 <div class="done-week-header">Эта неделя</div>
             {% elif (today - t.closed_at).days <= 14 %}
                 <div class="done-week-header">Прошлая неделя</div>
             {% else %}
-                <div class="done-week-header">{{ t.closed_at.strftime('%B %Y') if t.closed_at else 'Ранее' }}</div>
+                <div class="done-week-header">{{ t.closed_at.strftime('%B %Y') }}</div>
             {% endif %}
         {% endif %}
         <div class="done-row">
