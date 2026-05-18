@@ -280,6 +280,142 @@
         .category-work    { font-size: 0.7rem; font-weight: 600; color: #0071e3; }
         .category-personal { font-size: 0.7rem; font-weight: 600; color: #ff9500; }
 
+        /* ── Tabs ────────────────────────────────────────────── */
+        .tab-bar {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 20px;
+            background: rgba(255,255,255,0.75);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            border-radius: 14px;
+            padding: 5px;
+            border: 1px solid rgba(0,0,0,0.06);
+            box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 9px 16px;
+            border: none;
+            border-radius: 10px;
+            background: transparent;
+            color: #6e6e73;
+            font-size: 0.88rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+        .tab-btn.active {
+            background: white;
+            color: #1d1d1f;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+        }
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+
+        /* ── Done tasks ──────────────────────────────────────── */
+        .done-week-header {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #6e6e73;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 6px 0 8px;
+            margin-top: 12px;
+        }
+        .done-week-header:first-child { margin-top: 0; }
+        .done-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+        .done-row:last-child { border-bottom: none; }
+        .done-title {
+            flex: 1;
+            font-size: 0.9rem;
+            color: #6e6e73;
+            text-decoration: line-through;
+            text-decoration-color: rgba(0,0,0,0.2);
+        }
+        .done-date { font-size: 0.75rem; color: #aeaeb2; white-space: nowrap; }
+        .done-cat { font-size: 0.7rem; font-weight: 600; }
+        .btn-reopen { background: rgba(0,0,0,0.05); color: #1d1d1f; padding: 4px 10px; font-size: 0.75rem; border-radius: 7px; white-space: nowrap; }
+        .btn-reopen:hover { background: rgba(0,0,0,0.1); opacity: 1; }
+
+        /* ── Strategic goals ─────────────────────────────────── */
+        .strategy-add-form {
+            display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;
+            margin-bottom: 20px; padding-bottom: 20px;
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+        }
+        .strategy-add-form .field { display: flex; flex-direction: column; gap: 5px; }
+        .strategy-add-form input[type="text"] { min-width: 280px; }
+
+        .goal-card {
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+        .goal-card:last-child { border-bottom: none; }
+        .goal-header {
+            display: flex; align-items: flex-start;
+            justify-content: space-between; gap: 12px;
+        }
+        .goal-title-wrap { flex: 1; }
+        .goal-title { font-size: 0.92rem; font-weight: 500; color: #1d1d1f; }
+        .area-badge {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 2px 8px;
+            border-radius: 980px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+        .area-Бизнес      { background: rgba(0,113,227,0.1);   color: #0056c7; }
+        .area-Карьера     { background: rgba(94,92,230,0.1);   color: #4a48c5; }
+        .area-Люди        { background: rgba(52,199,89,0.1);   color: #1a7a35; }
+        .area-Нетворкинг  { background: rgba(255,149,0,0.12);  color: #bf6800; }
+        .area-Личное      { background: rgba(255,59,48,0.08);  color: #c0392b; }
+
+        .goal-activity {
+            display: flex; align-items: center; gap: 6px;
+            white-space: nowrap; flex-shrink: 0;
+        }
+        .activity-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        }
+        .dot-green  { background: #34c759; }
+        .dot-yellow { background: #ff9500; }
+        .dot-red    { background: #ff3b30; }
+        .dot-gray   { background: #aeaeb2; }
+        .activity-label { font-size: 0.75rem; color: #6e6e73; }
+
+        .last-log-text {
+            margin-top: 5px;
+            font-size: 0.82rem;
+            color: #6e6e73;
+            font-style: italic;
+            line-height: 1.4;
+        }
+        .goal-footer {
+            display: flex; gap: 8px; align-items: center; margin-top: 10px;
+        }
+        .btn-log { background: rgba(0,113,227,0.08); color: #0071e3; padding: 5px 12px; font-size: 0.78rem; border-radius: 8px; }
+        .btn-log:hover { background: rgba(0,113,227,0.15); opacity: 1; }
+
+        .log-form-wrap {
+            margin-top: 10px;
+            padding: 12px;
+            background: rgba(0,113,227,0.04);
+            border-radius: 10px;
+            border: 1px solid rgba(0,113,227,0.1);
+        }
+        .log-form-wrap textarea { min-height: 60px; margin-bottom: 8px; }
+        .btn-log-save { background: #0071e3; color: white; padding: 6px 16px; font-size: 0.82rem; }
+
         /* ── Responsive ──────────────────────────────────────── */
         @media (max-width: 900px) {
             th:first-child, td:first-child { display: none; }
@@ -346,6 +482,18 @@
 </header>
 
 <div class="container">
+
+<!-- Таб-бар -->
+<div class="tab-bar">
+    <button class="tab-btn" data-tab="tasks" onclick="switchTab('tasks')">📋 Задачи</button>
+    <button class="tab-btn" data-tab="done" onclick="switchTab('done')">✅ Выполнено</button>
+    <button class="tab-btn" data-tab="strategy" onclick="switchTab('strategy')">🧭 Стратегия</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- ВКЛ. ЗАДАЧИ                                           -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-pane" id="tab-tasks">
 
 <!-- AI Анализ и Дайджест -->
 <div class="card">
@@ -444,8 +592,8 @@
         <input type="text" class="search-input" name="q" id="searchInput"
                value="{{ search_query }}" placeholder="🔍  Поиск по задачам..."
                autocomplete="off">
-        <input type="hidden" name="status" value="{{ status_filter }}">
         <input type="hidden" name="priority" value="{{ priority_filter }}">
+        <input type="hidden" name="tab" value="tasks">
         <button type="button" class="btn-ai-search" id="aiSearchBtn" onclick="runAiSearch()">✦ AI поиск</button>
     </form>
     <div class="ai-search-note" id="aiSearchNote"></div>
@@ -454,14 +602,7 @@
 <!-- Фильтры -->
 <div class="card">
     <form class="filters" method="get">
-        <label>Статус</label>
-        <select name="status" onchange="this.form.submit()">
-            <option value="">Все</option>
-            {% for s in statuses %}
-            <option value="{{ s }}" {% if s == status_filter %}selected{% endif %}>{{ s }}</option>
-            {% endfor %}
-        </select>
-
+        <input type="hidden" name="tab" value="tasks">
         <label>Приоритет</label>
         <select name="priority" onchange="this.form.submit()">
             <option value="">Все</option>
@@ -469,8 +610,7 @@
             <option value="{{ p }}" {% if p == priority_filter %}selected{% endif %}>{{ p }}</option>
             {% endfor %}
         </select>
-
-        {% if status_filter or priority_filter %}
+        {% if priority_filter %}
         <a href="/">✕ Сбросить</a>
         {% endif %}
     </form>
@@ -582,9 +722,168 @@
     {% endif %}
 </div>
 
+</div><!-- /tab-tasks -->
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- ВКЛ. ВЫПОЛНЕНО                                        -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-pane" id="tab-done">
+<div class="card">
+    {% if done_tasks %}
+    {% set ns = namespace(cur_week='') %}
+    {% for t in done_tasks %}
+        {% if t.closed_at %}
+            {% set yr = t.closed_at.year %}
+            {% set wk = t.closed_at.isocalendar()[1] %}
+            {% set week_key = yr ~ '-' ~ wk %}
+        {% else %}
+            {% set week_key = 'unknown' %}
+        {% endif %}
+        {% if week_key != ns.cur_week %}
+            {% set ns.cur_week = week_key %}
+            {% if today.isocalendar()[1] == wk and today.year == yr %}
+                <div class="done-week-header">Эта неделя</div>
+            {% elif (today - t.closed_at).days <= 14 %}
+                <div class="done-week-header">Прошлая неделя</div>
+            {% else %}
+                <div class="done-week-header">{{ t.closed_at.strftime('%B %Y') if t.closed_at else 'Ранее' }}</div>
+            {% endif %}
+        {% endif %}
+        <div class="done-row">
+            <span class="done-cat {{ 'category-work' if t.category == 'Работа' else 'category-personal' }}">
+                {{ '🏢' if t.category == 'Работа' else ('👤' if t.category == 'Личное' else '') }}
+            </span>
+            <span class="done-title">{{ t.title }}</span>
+            <span class="done-date">{{ t.closed_at or '—' }}</span>
+            <form action="/update/{{ t.id }}" method="post">
+                <input type="hidden" name="status" value="В работе">
+                <button type="submit" class="btn-reopen">↩ Вернуть</button>
+            </form>
+            <form action="/delete/{{ t.id }}" method="post" onsubmit="return confirm('Удалить задачу?')">
+                <button type="submit" class="btn-delete">✕</button>
+            </form>
+        </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty">Выполненных задач пока нет</div>
+    {% endif %}
+</div>
+</div><!-- /tab-done -->
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- ВКЛ. СТРАТЕГИЯ                                        -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-pane" id="tab-strategy">
+
+<!-- Кнопка стратегического дайджеста -->
+<div class="card">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <button class="btn-digest-weekly" id="stratDigestBtn" onclick="sendStratDigest()">🧭 Стратегический обзор сейчас</button>
+        <span id="stratDigestStatus" style="color:#6e6e73; font-size:0.82rem;"></span>
+    </div>
+    <div style="margin-top:8px; font-size:0.72rem; color:#6e6e73;">
+        Автообзор: воскресенье 10:00 по Новосибирску → Telegram
+    </div>
+</div>
+
+<!-- Добавить цель -->
+<div class="card">
+    <form action="/strategy/add" method="post" class="strategy-add-form">
+        <div class="field" style="flex:1;">
+            <label>Стратегическая цель</label>
+            <input type="text" name="title" placeholder="Название цели..." required>
+        </div>
+        <div class="field">
+            <label>Направление</label>
+            <select name="area">
+                {% for a in strategic_areas %}
+                <option value="{{ a }}">{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label>&nbsp;</label>
+            <button type="submit" class="btn-add">+ Добавить</button>
+        </div>
+    </form>
+
+    <!-- Список целей -->
+    {% if strategic_goals %}
+    {% for g in strategic_goals %}
+        {% if g.last_log_date %}
+            {% set days_ago = (today - g.last_log_date).days %}
+        {% else %}
+            {% set days_ago = 999 %}
+        {% endif %}
+        <div class="goal-card">
+            <div class="goal-header">
+                <div class="goal-title-wrap">
+                    <span class="goal-title">{{ g.title }}</span>
+                    <span class="area-badge area-{{ g.area }}">{{ g.area }}</span>
+                </div>
+                <div class="goal-activity">
+                    {% if days_ago <= 7 %}
+                        <span class="activity-dot dot-green"></span>
+                        <span class="activity-label">{{ days_ago }} дн. назад</span>
+                    {% elif days_ago <= 14 %}
+                        <span class="activity-dot dot-yellow"></span>
+                        <span class="activity-label">{{ days_ago }} дн. назад</span>
+                    {% elif days_ago < 999 %}
+                        <span class="activity-dot dot-red"></span>
+                        <span class="activity-label">{{ days_ago }} дн. назад</span>
+                    {% else %}
+                        <span class="activity-dot dot-gray"></span>
+                        <span class="activity-label">нет записей</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% if g.last_log_text %}
+            <div class="last-log-text">↳ {{ g.last_log_text[:150] }}{% if g.last_log_text|length > 150 %}…{% endif %}</div>
+            {% endif %}
+            <div class="goal-footer">
+                <button class="btn-log" onclick="toggleLogForm({{ g.id }})">+ Запись</button>
+                <form action="/strategy/delete/{{ g.id }}" method="post"
+                      onsubmit="return confirm('Удалить цель «{{ g.title }}»?')">
+                    <button type="submit" class="btn-delete">✕</button>
+                </form>
+            </div>
+            <div class="log-form-wrap" id="log-form-{{ g.id }}" style="display:none;">
+                <form action="/strategy/log/{{ g.id }}" method="post">
+                    <textarea name="text" placeholder="Что сделано, что понял, что дальше..."></textarea>
+                    <button type="submit" class="btn-log-save">Сохранить запись</button>
+                </form>
+            </div>
+        </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty">Стратегические цели не добавлены</div>
+    {% endif %}
+</div>
+
+</div><!-- /tab-strategy -->
+
 </div><!-- /container -->
 
 <script>
+// ── Таб-переключение ───────────────────────────────────────
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    const pane = document.getElementById('tab-' + tabName);
+    const btn  = document.querySelector(`[data-tab="${tabName}"]`);
+    if (pane) pane.classList.add('active');
+    if (btn)  btn.classList.add('active');
+    const url = new URL(location.href);
+    url.searchParams.set('tab', tabName);
+    history.replaceState({}, '', url);
+}
+
+// Активируем нужный таб при загрузке
+(function() {
+    const tab = new URLSearchParams(location.search).get('tab') || 'tasks';
+    switchTab(tab);
+})();
+
 // ── Поиск ──────────────────────────────────────────────────
 let searchTimer = null;
 document.getElementById("searchInput").addEventListener("input", function() {
@@ -595,16 +894,14 @@ document.getElementById("searchInput").addEventListener("input", function() {
 async function runAiSearch() {
     const query = document.getElementById("searchInput").value.trim();
     if (!query) return;
-    const btn = document.getElementById("aiSearchBtn");
+    const btn  = document.getElementById("aiSearchBtn");
     const note = document.getElementById("aiSearchNote");
-    btn.disabled = true;
-    btn.textContent = "Ищу...";
-    note.style.display = "none";
+    btn.disabled = true; btn.textContent = "Ищу..."; note.style.display = "none";
     document.querySelectorAll("tbody tr").forEach(tr => tr.classList.remove("ai-match","ai-no-match"));
     try {
-        const res = await fetch("/ai-search", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({query}) });
+        const res  = await fetch("/ai-search", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({query}) });
         const data = await res.json();
-        const ids = new Set((data.ids||[]).map(String));
+        const ids  = new Set((data.ids||[]).map(String));
         document.querySelectorAll("tbody tr").forEach(tr => {
             const id = tr.querySelector("td")?.textContent?.trim();
             tr.classList.add(ids.has(id) ? "ai-match" : "ai-no-match");
@@ -612,11 +909,9 @@ async function runAiSearch() {
         note.textContent = "✦ " + (data.explanation || "AI поиск выполнен");
         note.style.display = "block";
     } catch(e) {
-        note.textContent = "Ошибка AI поиска";
-        note.style.display = "block";
+        note.textContent = "Ошибка AI поиска"; note.style.display = "block";
     } finally {
-        btn.disabled = false;
-        btn.textContent = "✦ AI поиск";
+        btn.disabled = false; btn.textContent = "✦ AI поиск";
     }
 }
 
@@ -628,7 +923,7 @@ async function sendDigest(type) {
     dailyBtn.disabled = true; weeklyBtn.disabled = true;
     statusEl.textContent = "Отправляю в Telegram...";
     try {
-        const res = await fetch("/digest", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({type}) });
+        const res  = await fetch("/digest", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({type}) });
         const data = await res.json();
         statusEl.textContent = data.ok ? "✓ Отправлено" : "Ошибка: " + data.error;
     } catch(e) { statusEl.textContent = "Ошибка"; }
@@ -638,19 +933,34 @@ async function sendDigest(type) {
     }
 }
 
+// ── Стратегический дайджест ────────────────────────────────
+async function sendStratDigest() {
+    const btn = document.getElementById("stratDigestBtn");
+    const statusEl = document.getElementById("stratDigestStatus");
+    btn.disabled = true; statusEl.textContent = "Отправляю в Telegram...";
+    try {
+        const res  = await fetch("/strategy/digest", { method:"POST" });
+        const data = await res.json();
+        statusEl.textContent = data.ok ? "✓ Отправлено" : "Ошибка: " + data.error;
+    } catch(e) { statusEl.textContent = "Ошибка"; }
+    finally {
+        btn.disabled = false;
+        setTimeout(() => { statusEl.textContent = ""; }, 3500);
+    }
+}
+
 // ── AI Анализ ──────────────────────────────────────────────
 async function analyzeTasks() {
-    const btn = document.getElementById("analyzeBtn");
+    const btn    = document.getElementById("analyzeBtn");
     const status = document.getElementById("analyzeStatus");
     const result = document.getElementById("aiResult");
-    const text = document.getElementById("aiText");
+    const text   = document.getElementById("aiText");
     btn.disabled = true; status.textContent = "Анализирую..."; result.style.display = "none";
     try {
-        const res = await fetch("/analyze", { method:"POST" });
+        const res  = await fetch("/analyze", { method:"POST" });
         const data = await res.json();
         text.textContent = data.summary;
-        result.style.display = "block";
-        status.textContent = "";
+        result.style.display = "block"; status.textContent = "";
     } catch(e) { status.textContent = "Ошибка"; }
     finally { btn.disabled = false; }
 }
@@ -688,24 +998,25 @@ async function startRecording() {
 async function sendAudio() {
     const btn = document.getElementById("voiceBtn");
     const statusEl = document.getElementById("voiceStatus");
-    const preview = document.getElementById("voicePreview");
+    const preview  = document.getElementById("voicePreview");
     btn.disabled = true; statusEl.textContent = "Обрабатываю..."; preview.style.display = "none";
     try {
         const blob = new Blob(audioChunks, { type: "audio/webm" });
         const formData = new FormData();
         formData.append("audio", blob, "audio.webm");
-        const res = await fetch("/voice", { method:"POST", body:formData });
+        const res  = await fetch("/voice", { method:"POST", body:formData });
         const data = await res.json();
         if (data.error) { statusEl.textContent = "Ошибка: " + data.error; return; }
         document.getElementById("fieldTitle").value    = data.title    || "";
-        document.getElementById("fieldProject").value  = data.project  || "";
         document.getElementById("fieldAssignee").value = data.assignee || "";
         for (const opt of document.getElementById("fieldPriority").options)
             if (opt.value === data.priority) { opt.selected = true; break; }
         for (const opt of document.getElementById("fieldStatus").options)
-            if (opt.value === data.status) { opt.selected = true; break; }
+            if (opt.value === data.status)   { opt.selected = true; break; }
         for (const opt of document.getElementById("fieldEnergy").options)
-            if (opt.value === data.energy) { opt.selected = true; break; }
+            if (opt.value === data.energy)   { opt.selected = true; break; }
+        for (const opt of document.getElementById("fieldCategory").options)
+            if (opt.value === data.category) { opt.selected = true; break; }
         if (data.deadline) document.getElementById("fieldDeadline").value = data.deadline;
         preview.textContent = "🎙 «" + data.transcript + "»";
         preview.style.display = "block";
@@ -717,12 +1028,21 @@ async function sendAudio() {
 // ── Group toggle ───────────────────────────────────────────
 const groupState = {};
 function toggleGroup(gid) {
-    const rows = document.querySelectorAll(`tr[data-gid="${gid}"]`);
+    const rows   = document.querySelectorAll(`tr[data-gid="${gid}"]`);
     const toggle = document.getElementById(`toggle-${gid}`);
     const collapsed = groupState[gid];
     rows.forEach(r => r.style.display = collapsed ? "" : "none");
     if (toggle) toggle.textContent = collapsed ? "▼" : "▶";
     groupState[gid] = !collapsed;
+}
+
+// ── Стратегия: форма записи ────────────────────────────────
+function toggleLogForm(goalId) {
+    const form = document.getElementById('log-form-' + goalId);
+    if (!form) return;
+    const visible = form.style.display !== 'none';
+    form.style.display = visible ? 'none' : 'block';
+    if (!visible) form.querySelector('textarea').focus();
 }
 
 // ── Service Worker ─────────────────────────────────────────

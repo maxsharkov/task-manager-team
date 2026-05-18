@@ -30,6 +30,36 @@ PRIORITIES = ["Низкий", "Средний", "Высокий"]
 ENERGIES = ["Лёгкая", "Средняя", "Тяжёлая"]
 CATEGORIES = ["Работа", "Личное"]
 RECURRENCES = ["Ежедневно", "Еженедельно", "Ежемесячно"]
+STRATEGIC_AREAS = ["Бизнес", "Карьера", "Люди", "Нетворкинг", "Личное"]
+
+STRATEGIC_SEED = [
+    ("Качество связи — проект с МСК", "Бизнес"),
+    ("Предпринимательство — проект с МСК", "Бизнес"),
+    ("Слабости конкурентов — проект с МСК", "Бизнес"),
+    ("Growth Hacking — проект с МСК", "Бизнес"),
+    ("Орг. модель — проект с МСК", "Бизнес"),
+    ("Взаимодействие с Альфой — проект вне компании", "Бизнес"),
+    ("Взаимодействие с B2B клиентом — проект вне компании", "Бизнес"),
+    ("Сколково LIFT — войти в полноценную программу", "Карьера"),
+    ("Занять C-level в крупной компании", "Карьера"),
+    ("Составить топ компаний и пообщаться с хантерами", "Карьера"),
+    ("Подготовка к дистанционному формату — консультант/эксперт", "Карьера"),
+    ("Определить цели в деньгах и позиции", "Карьера"),
+    ("Выступать на публичных площадках — ВЭФ, СМИ, блог, видео", "Карьера"),
+    ("Растить людей, преемников, лидеров", "Люди"),
+    ("Найти менти и работать с ним", "Люди"),
+    ("Общаться с менторами — Симдякин, Пятков, Торбахов, Федорова", "Люди"),
+    ("Вести себя как CEO — смело, поддерживающе, взвешенно", "Люди"),
+    ("После каждого общения человек чувствует себя лучше", "Люди"),
+    ("Семья — разговоры на равных", "Люди"),
+    ("Растить нетворкинг — GMR7, B2B клиенты", "Нетворкинг"),
+    ("Войти в клуб предпринимателей — Крона, акселераторы", "Нетворкинг"),
+    ("Спортивная цель — проплыть 3 км за час", "Личное"),
+    ("Организовать путешествие / выступить на барабанах", "Личное"),
+    ("Сохранять внутреннюю тишину — медитации, спорт, GLAD", "Личное"),
+    ("Визуализировать себя в 50 лет — семья, загар, учусь, инновации", "Личное"),
+    ("Делать сложное простым — аналогии, простота в общении", "Личное"),
+]
 
 
 def calc_next_deadline(deadline, recurrence):
@@ -86,6 +116,28 @@ def init_db():
                     done BOOLEAN DEFAULT FALSE
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS strategic_goals (
+                    id SERIAL PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    area TEXT,
+                    created_at DATE DEFAULT CURRENT_DATE
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS strategic_logs (
+                    id SERIAL PRIMARY KEY,
+                    goal_id INTEGER REFERENCES strategic_goals(id) ON DELETE CASCADE,
+                    logged_at DATE DEFAULT CURRENT_DATE,
+                    text TEXT NOT NULL
+                )
+            """)
+            cur.execute("SELECT COUNT(*) FROM strategic_goals")
+            if cur.fetchone()[0] == 0:
+                cur.executemany(
+                    "INSERT INTO strategic_goals (title, area) VALUES (%s, %s)",
+                    STRATEGIC_SEED
+                )
 
 
 def send_telegram(text):
@@ -105,21 +157,43 @@ def build_digest(digest_type="daily"):
 
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT title, status, priority, deadline, energy, category, closed_at, progress, assignee FROM tasks ORDER BY created_at")
+            cur.execute("SELECT title, status, priority, deadline, category, closed_at, progress, assignee FROM tasks ORDER BY created_at")
             tasks = cur.fetchall()
 
     if not tasks:
         send_telegram("📋 *Дайджест задач*\n\nЗадач пока нет.")
         return
 
-    tasks_text = "\n".join([
-        f"- [{t['category'] or '?'}] «{t['title']}» | {t['status']} | {t['priority']}"
-        f" | дедлайн: {t['deadline'] or 'не указан'}"
-        + (f" | закрыта: {t['closed_at']}" if t['closed_at'] else "")
-        + (f" | исполнитель: {t['assignee']}" if t['assignee'] else "")
-        + (f" | прогресс: {t['progress']}" if t['progress'] else "")
-        for t in tasks
-    ])
+    def fmt(t):
+        line = f"- [{t['category'] or '?'}] «{t['title']}»"
+        if t['deadline']:
+            line += f" | дедлайн: {t['deadline']}"
+        if t['assignee']:
+            line += f" | {t['assignee']}"
+        if t['progress']:
+            line += f" | прогресс: {t['progress'][:60]}"
+        return line
+
+    closed_today = [t for t in tasks if t['closed_at'] and str(t['closed_at'])[:10] == today]
+    overdue = [t for t in tasks if t['status'] != 'Завершена' and t['deadline'] and str(t['deadline']) < today]
+    active_hp = [t for t in tasks if t['status'] != 'Завершена' and t['priority'] == 'Высокий'
+                 and (not t['deadline'] or str(t['deadline']) >= today)]
+
+    sections = []
+    sections.append(
+        "✅ Завершено сегодня:\n" + "\n".join(fmt(t) for t in closed_today)
+        if closed_today else "✅ Завершено сегодня: ничего"
+    )
+    sections.append(
+        "🔴 Просрочено:\n" + "\n".join(fmt(t) for t in overdue)
+        if overdue else "🔴 Просрочено: нет"
+    )
+    sections.append(
+        "🔥 В работе (высокий приоритет):\n" + "\n".join(fmt(t) for t in active_hp)
+        if active_hp else "🔥 В работе (высокий приоритет): нет"
+    )
+
+    tasks_structured = "\n\n".join(sections)
 
     if digest_type == "weekly":
         header = "📊 *Итоги недели — оценка выполнения обещаний*"
@@ -130,19 +204,20 @@ def build_digest(digest_type="daily"):
 
     prompt = f"""Ты жёсткий, честный коуч топ-менеджера. Без корпоративного языка, без комплиментов. Только факты и прямая оценка.
 
-Сегодня {today}. Задачи (категория указана в скобках):
-{tasks_text}
+Сегодня {today}. Задачи структурированы по факту:
 
-Сделай оценку выполнения обещаний по двум категориям.
+{tasks_structured}
 
-🏢 РАБОЧИЕ ЦЕЛИ
-1. Что было обещано (высокий приоритет или дедлайн ≤ сегодня, категория Работа)
+Сделай оценку выполнения обещаний {period} по двум категориям.
+
+🏢 РАБОЧИЕ ЦЕЛИ (категория Работа)
+1. Что было обещано
 2. Что реально выполнено
 3. Что просрочено или зависло
 4. Оценка: X/10
 
-👤 ЛИЧНЫЕ ЦЕЛИ
-1. Что было обещано (высокий приоритет или дедлайн ≤ сегодня, категория Личное)
+👤 ЛИЧНЫЕ ЦЕЛИ (категория Личное)
+1. Что было обещано
 2. Что реально выполнено
 3. Что просрочено или зависло
 4. Оценка: X/10
@@ -150,7 +225,7 @@ def build_digest(digest_type="daily"):
 📌 ИТОГО
 — Общая оценка: X/10
 — Главный паттерн: что системно не выполняется
-— Одна конкретная рекомендация на следующие 7 дней
+— Одна конкретная рекомендация
 
 Шкала: 9-10 = отлично, 7-8 = хорошо, 5-6 = средне, ниже 5 = провал. Будь честным."""
 
@@ -180,12 +255,84 @@ def weekly_digest():
     build_digest("weekly")
 
 
+def build_strategic_digest():
+    today = date.today()
+    today_str = today.isoformat()
+
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT * FROM strategic_goals ORDER BY area, title")
+            goals = cur.fetchall()
+            if not goals:
+                send_telegram("🧭 *Стратегический обзор*\n\nСтратегических целей пока нет.")
+                return
+            goal_logs = {}
+            for g in goals:
+                cur.execute("""
+                    SELECT text, logged_at FROM strategic_logs
+                    WHERE goal_id = %s ORDER BY logged_at DESC, id DESC LIMIT 3
+                """, (g['id'],))
+                goal_logs[g['id']] = cur.fetchall()
+
+    lines = []
+    for g in goals:
+        logs = goal_logs.get(g['id'], [])
+        if logs:
+            last_date = logs[0]['logged_at']
+            days_ago = (today - last_date).days
+            log_entries = "\n".join(f"  [{l['logged_at']}] {l['text']}" for l in logs)
+            activity = f"Последняя запись: {days_ago} дн. назад\n{log_entries}"
+        else:
+            days_ago = 999
+            activity = "Записей нет — цель ни разу не обновлялась"
+        lines.append(f"[{g['area']}] «{g['title']}»\n{activity}")
+
+    goals_structured = "\n\n".join(lines)
+
+    prompt = f"""Ты жёсткий честный коуч топ-менеджера. Еженедельный стратегический обзор.
+
+Сегодня {today_str}.
+
+Стратегические цели и активность:
+
+{goals_structured}
+
+Правила оценки каждой цели:
+- Запись за последние 7 дней → отметь прогресс, спроси "что дальше?"
+- 8-14 дней без записи → мягкий вызов: "что остановило?"
+- 15-30 дней → жёсткий вызов: назови конкретное следующее действие
+- 30+ дней → прямой вопрос: "Эта цель живая или ты её уже отпустил?"
+
+Структура ответа:
+🧭 СТРАТЕГИЧЕСКИЙ ОБЗОР
+
+По каждой цели — одна строка: статус + вопрос или комментарий.
+
+💪 ПРИЗНАНИЕ — что реально двигалось на этой неделе.
+
+📌 ГЛАВНЫЙ ВОПРОС НЕДЕЛИ — один сильный вопрос по самой застывшей зоне.
+
+Без воды. Без корпоративного языка. Максимально конкретно."""
+
+    response = openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "Ты жёсткий честный коуч. Отвечай на русском, без воды."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+    send_telegram(f"🧭 *Стратегический обзор*\n\n{response.choices[0].message.content}")
+
+
+def strategic_review():
+    build_strategic_digest()
+
+
 # ── Планировщик ────────────────────────────────────────────
 scheduler = BackgroundScheduler(timezone=NSK)
-# Ежедневно в 21:45 по Новосибирску
 scheduler.add_job(daily_digest, CronTrigger(hour=21, minute=45, timezone=NSK))
-# Воскресенье в 20:00 по Новосибирску
 scheduler.add_job(weekly_digest, CronTrigger(day_of_week="sun", hour=20, minute=0, timezone=NSK))
+scheduler.add_job(strategic_review, CronTrigger(day_of_week="sun", hour=10, minute=0, timezone=NSK))
 scheduler.start()
 
 
@@ -214,9 +361,7 @@ def get_tags():
 
 @app.route("/")
 def index():
-    status_filter = request.args.get("status", "")
     priority_filter = request.args.get("priority", "")
-    tag_filter = request.args.get("tag", "")
     search_query = request.args.get("q", "").strip()
 
     query = """
@@ -225,22 +370,16 @@ def index():
             COUNT(s.id) FILTER (WHERE s.done) AS subtask_done
         FROM tasks t
         LEFT JOIN subtasks s ON s.task_id = t.id
-        WHERE 1=1
+        WHERE t.status != 'Завершена'
     """
     params = []
 
-    if status_filter:
-        query += " AND t.status = %s"
-        params.append(status_filter)
     if priority_filter:
         query += " AND t.priority = %s"
         params.append(priority_filter)
-    if tag_filter:
-        query += " AND t.tags ILIKE %s"
-        params.append(f"%{tag_filter}%")
     if search_query:
-        query += " AND (t.title ILIKE %s OR t.project ILIKE %s OR t.assignee ILIKE %s)"
-        params.extend([f"%{search_query}%"] * 3)
+        query += " AND (t.title ILIKE %s OR t.assignee ILIKE %s)"
+        params.extend([f"%{search_query}%"] * 2)
 
     query += """
         GROUP BY t.id
@@ -255,21 +394,84 @@ def index():
             cur.execute(query, params)
             tasks = cur.fetchall()
 
+            cur.execute("""
+                SELECT * FROM tasks WHERE status = 'Завершена'
+                ORDER BY closed_at DESC NULLS LAST, id DESC
+            """)
+            done_tasks = cur.fetchall()
+
+            cur.execute("""
+                SELECT g.*,
+                    MAX(l.logged_at) AS last_log_date,
+                    (SELECT text FROM strategic_logs
+                     WHERE goal_id = g.id ORDER BY logged_at DESC, id DESC LIMIT 1) AS last_log_text
+                FROM strategic_goals g
+                LEFT JOIN strategic_logs l ON l.goal_id = g.id
+                GROUP BY g.id
+                ORDER BY g.area, g.title
+            """)
+            strategic_goals = cur.fetchall()
+
     return render_template(
         "index.html",
         tasks=tasks,
+        done_tasks=done_tasks,
+        strategic_goals=strategic_goals,
         statuses=STATUSES,
         priorities=PRIORITIES,
         energies=ENERGIES,
         recurrences=RECURRENCES,
         categories=CATEGORIES,
-        status_filter=status_filter,
+        strategic_areas=STRATEGIC_AREAS,
         priority_filter=priority_filter,
-        tag_filter=tag_filter,
         search_query=search_query,
         today=date.today(),
         parse_tags=parse_tags,
     )
+
+
+@app.route("/strategy/add", methods=["POST"])
+def strategy_add():
+    title = request.form.get("title", "").strip()
+    area = request.form.get("area", "")
+    if title:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO strategic_goals (title, area) VALUES (%s, %s)",
+                    (title, area)
+                )
+    return redirect("/?tab=strategy")
+
+
+@app.route("/strategy/log/<int:goal_id>", methods=["POST"])
+def strategy_log(goal_id):
+    text = request.form.get("text", "").strip()
+    if text:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO strategic_logs (goal_id, text) VALUES (%s, %s)",
+                    (goal_id, text)
+                )
+    return redirect("/?tab=strategy")
+
+
+@app.route("/strategy/delete/<int:goal_id>", methods=["POST"])
+def strategy_delete(goal_id):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM strategic_goals WHERE id=%s", (goal_id,))
+    return redirect("/?tab=strategy")
+
+
+@app.route("/strategy/digest", methods=["POST"])
+def strategy_digest_manual():
+    try:
+        build_strategic_digest()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/add", methods=["POST"])
