@@ -503,7 +503,7 @@ def add():
     recurrence = request.form.get("recurrence", "").strip() or None
     category = request.form.get("category", "Работа")
 
-    event_id = gcal.create_event(title, deadline, priority, None, assignee) if deadline else None
+    event_id = gcal.create_event(title, deadline, priority, None, assignee, recurrence) if deadline else None
 
     with get_db() as conn:
         with conn.cursor() as cur:
@@ -534,14 +534,22 @@ def update(task_id):
 
             if now_completed and not was_completed and task["recurrence"]:
                 next_dl = calc_next_deadline(task["deadline"], task["recurrence"])
-                event_id = gcal.create_event(task["title"], next_dl, task["priority"],
-                                             None, task["assignee"]) if next_dl else None
+                if task["calendar_event_id"]:
+                    gcal.delete_event(task["calendar_event_id"])
+                new_event_id = gcal.create_event(
+                    task["title"], next_dl, task["priority"],
+                    None, task["assignee"], task["recurrence"]
+                ) if next_dl else None
+                cur.execute(
+                    "UPDATE tasks SET calendar_event_id=NULL WHERE id=%s", (task_id,)
+                )
                 cur.execute(
                     "INSERT INTO tasks (title, status, priority, deadline, energy,"
-                    " assignee, recurrence, calendar_event_id)"
-                    " VALUES (%s,'Новая',%s,%s,%s,%s,%s,%s)",
+                    " assignee, recurrence, calendar_event_id, category)"
+                    " VALUES (%s,'Новая',%s,%s,%s,%s,%s,%s,%s)",
                     (task["title"], task["priority"], next_dl,
-                     task["energy"], task["assignee"], task["recurrence"], event_id)
+                     task["energy"], task["assignee"], task["recurrence"],
+                     new_event_id, task["category"])
                 )
     return redirect(url_for("index"))
 
@@ -589,9 +597,9 @@ def edit_save(task_id):
 
     if deadline:
         if existing_event_id:
-            gcal.update_event(existing_event_id, title, deadline, priority, None, assignee)
+            gcal.update_event(existing_event_id, title, deadline, priority, None, assignee, recurrence)
         else:
-            new_event_id = gcal.create_event(title, deadline, priority, None, assignee)
+            new_event_id = gcal.create_event(title, deadline, priority, None, assignee, recurrence)
     else:
         if existing_event_id:
             gcal.delete_event(existing_event_id)

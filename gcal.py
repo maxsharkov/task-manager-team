@@ -25,32 +25,40 @@ def _get_service():
     return build("calendar", "v3", credentials=creds)
 
 
-def _build_body(title, deadline, priority=None, project=None, assignee=None):
+_RRULE = {
+    "Ежедневно":   "RRULE:FREQ=DAILY",
+    "Еженедельно": "RRULE:FREQ=WEEKLY",
+    "Ежемесячно":  "RRULE:FREQ=MONTHLY",
+}
+
+
+def _build_body(title, deadline, priority=None, project=None, assignee=None, recurrence=None):
     parts = []
-    if project:
-        parts.append(f"Проект: {project}")
     if assignee:
         parts.append(f"Исполнитель: {assignee}")
     if priority:
         parts.append(f"Приоритет: {priority}")
     date_str = str(deadline)
-    return {
+    body = {
         "summary": title,
         "description": "\n".join(parts),
         "start": {"date": date_str},
         "end": {"date": date_str},
         "colorId": _PRIORITY_COLOR.get(priority, "0"),
     }
+    if recurrence and recurrence in _RRULE:
+        body["recurrence"] = [_RRULE[recurrence]]
+    return body
 
 
-def create_event(title, deadline, priority=None, project=None, assignee=None):
+def create_event(title, deadline, priority=None, project=None, assignee=None, recurrence=None):
     service = _get_service()
     if not service or not deadline:
         return None
     try:
         event = service.events().insert(
             calendarId=CALENDAR_ID,
-            body=_build_body(title, deadline, priority, project, assignee),
+            body=_build_body(title, deadline, priority, project, assignee, recurrence),
         ).execute()
         return event.get("id")
     except HttpError as e:
@@ -58,7 +66,7 @@ def create_event(title, deadline, priority=None, project=None, assignee=None):
         return None
 
 
-def update_event(event_id, title, deadline, priority=None, project=None, assignee=None):
+def update_event(event_id, title, deadline, priority=None, project=None, assignee=None, recurrence=None):
     service = _get_service()
     if not service or not event_id or not deadline:
         return False
@@ -66,7 +74,7 @@ def update_event(event_id, title, deadline, priority=None, project=None, assigne
         service.events().update(
             calendarId=CALENDAR_ID,
             eventId=event_id,
-            body=_build_body(title, deadline, priority, project, assignee),
+            body=_build_body(title, deadline, priority, project, assignee, recurrence),
         ).execute()
         return True
     except HttpError as e:
