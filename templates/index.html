@@ -243,18 +243,27 @@
             font-weight: 600;
             letter-spacing: 0.01em;
         }
-        .priority-Высокий { background: rgba(255,59,48,0.1);  color: #c0392b; }
-        .priority-Средний { background: rgba(255,149,0,0.12); color: #bf6800; }
-        .priority-Низкий  { background: rgba(52,199,89,0.1);  color: #1a7a35; }
+        /* Приоритет — солидные цвета */
+        .priority-Высокий { background: #ff3b30; color: white; }
+        .priority-Средний { background: #ff9500; color: white; }
+        .priority-Низкий  { background: #34c759; color: white; }
 
-        .energy-Тяжёлая { background: rgba(255,59,48,0.08);  color: #c0392b; }
-        .energy-Средняя { background: rgba(255,149,0,0.1);   color: #bf6800; }
-        .energy-Лёгкая  { background: rgba(52,199,89,0.08);  color: #1a7a35; }
+        /* Усилия — мягкие тона */
+        .energy-Тяжёлая { background: rgba(255,59,48,0.12);  color: #c0392b; font-weight: 600; }
+        .energy-Средняя { background: rgba(255,149,0,0.14);  color: #9b5a00; font-weight: 600; }
+        .energy-Лёгкая  { background: rgba(52,199,89,0.12);  color: #1a6b30; font-weight: 600; }
+
+        /* ── Priority stripe (первая колонка таблицы) ────────── */
+        .p-stripe { width: 4px; min-width: 4px; padding: 0 !important; border-radius: 0; }
+        .p-stripe-Высокий { background: #ff3b30; }
+        .p-stripe-Средний { background: #ff9500; }
+        .p-stripe-Низкий  { background: #34c759; }
+        .p-stripe-default { background: transparent; }
 
         /* ── Misc ────────────────────────────────────────────── */
         .task-project { font-size: 0.78rem; color: #0071e3; font-weight: 500; }
         .task-progress { font-size: 0.75rem; color: #34c759; margin-top: 3px; }
-        .deadline-overdue { color: #ff3b30; font-weight: 500; }
+        .deadline-overdue { color: #ff3b30; font-weight: 700; background: rgba(255,59,48,0.08); padding: 2px 7px; border-radius: 6px; }
         .date-text { color: #6e6e73; font-size: 0.82rem; }
         .status-form { display: flex; gap: 6px; align-items: center; }
         .status-form select { padding: 5px 28px 5px 8px; font-size: 0.8rem; border-radius: 8px; }
@@ -266,19 +275,37 @@
 
         /* ── Project groups ──────────────────────────────────── */
         tr.group-header td {
-            background: rgba(0,0,0,0.025);
-            font-size: 0.75rem;
+            font-size: 0.78rem;
             font-weight: 700;
-            color: #6e6e73;
             text-transform: uppercase;
-            letter-spacing: 0.06em;
-            padding: 8px 14px;
+            letter-spacing: 0.07em;
+            padding: 10px 16px;
             cursor: pointer;
             user-select: none;
-            border-bottom: 1px solid rgba(0,0,0,0.06);
+            border-bottom: none;
+            border-radius: 0;
         }
-        tr.group-header:hover td { background: rgba(0,0,0,0.04); }
-        .group-toggle { float: right; font-size: 0.65rem; opacity: 0.5; }
+        /* Работа — синяя полоса */
+        tr.group-work td {
+            background: linear-gradient(90deg, rgba(0,113,227,0.1) 0%, rgba(0,113,227,0.03) 100%);
+            color: #0056c7;
+            border-left: 4px solid #0071e3;
+        }
+        tr.group-work:hover td { background: linear-gradient(90deg, rgba(0,113,227,0.15) 0%, rgba(0,113,227,0.05) 100%); }
+        /* Личное — фиолетовая полоса */
+        tr.group-personal td {
+            background: linear-gradient(90deg, rgba(191,90,242,0.1) 0%, rgba(191,90,242,0.03) 100%);
+            color: #7d3ac1;
+            border-left: 4px solid #bf5af2;
+        }
+        tr.group-personal:hover td { background: linear-gradient(90deg, rgba(191,90,242,0.15) 0%, rgba(191,90,242,0.05) 100%); }
+        /* Без категории */
+        tr.group-none td {
+            background: rgba(0,0,0,0.03);
+            color: #6e6e73;
+            border-left: 4px solid #aeaeb2;
+        }
+        .group-toggle { float: right; font-size: 0.65rem; opacity: 0.6; }
         .group-overdue { color: #ff3b30; margin-left: 8px; font-size: 0.7rem; }
 
         /* ── Subtask progress ────────────────────────────────── */
@@ -297,8 +324,8 @@
             font-size: 0.68rem; color: #5e5ce6; font-weight: 600;
             margin-left: 6px; vertical-align: middle;
         }
-        .category-work    { font-size: 0.7rem; font-weight: 600; color: #0071e3; }
-        .category-personal { font-size: 0.7rem; font-weight: 600; color: #ff9500; }
+        .category-work    { font-size: 0.7rem; font-weight: 700; color: #0071e3; }
+        .category-personal { font-size: 0.7rem; font-weight: 700; color: #bf5af2; }
 
         /* ── Tabs ────────────────────────────────────────────── */
         .tab-bar {
@@ -323,13 +350,14 @@
             font-size: 0.88rem;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.15s;
+            transition: all 0.18s;
             font-family: inherit;
         }
         .tab-btn.active {
             background: white;
-            color: #1d1d1f;
-            box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+            color: #0071e3;
+            font-weight: 700;
+            box-shadow: 0 1px 8px rgba(0,113,227,0.15);
         }
         .tab-pane { display: none; }
         .tab-pane.active { display: block; }
@@ -375,10 +403,20 @@
         .strategy-add-form input[type="text"] { min-width: 280px; }
 
         .goal-card {
-            padding: 14px 0;
+            padding: 14px 0 14px 14px;
             border-bottom: 1px solid rgba(0,0,0,0.05);
+            border-left: 3px solid transparent;
+            margin-left: -4px;
+            transition: background 0.12s;
         }
         .goal-card:last-child { border-bottom: none; }
+        .goal-card:hover { background: rgba(0,0,0,0.012); border-radius: 0 8px 8px 0; }
+        /* Цвет полосы по направлению */
+        .goal-card[data-area="Бизнес"]     { border-left-color: #0071e3; }
+        .goal-card[data-area="Карьера"]    { border-left-color: #5e5ce6; }
+        .goal-card[data-area="Люди"]       { border-left-color: #34c759; }
+        .goal-card[data-area="Нетворкинг"] { border-left-color: #ff9500; }
+        .goal-card[data-area="Личное"]     { border-left-color: #bf5af2; }
         .goal-header {
             display: flex; align-items: flex-start;
             justify-content: space-between; gap: 12px;
@@ -394,11 +432,11 @@
             font-weight: 700;
             letter-spacing: 0.02em;
         }
-        .area-Бизнес      { background: rgba(0,113,227,0.1);   color: #0056c7; }
-        .area-Карьера     { background: rgba(94,92,230,0.1);   color: #4a48c5; }
-        .area-Люди        { background: rgba(52,199,89,0.1);   color: #1a7a35; }
-        .area-Нетворкинг  { background: rgba(255,149,0,0.12);  color: #bf6800; }
-        .area-Личное      { background: rgba(255,59,48,0.08);  color: #c0392b; }
+        .area-Бизнес      { background: #0071e3; color: white; }
+        .area-Карьера     { background: #5e5ce6; color: white; }
+        .area-Люди        { background: #34c759; color: white; }
+        .area-Нетворкинг  { background: #ff9500; color: white; }
+        .area-Личное      { background: #bf5af2; color: white; }
 
         .goal-activity {
             display: flex; align-items: center; gap: 6px;
@@ -473,6 +511,10 @@
             .site-header { padding: 0 16px; }
             .container { padding: 16px 12px; }
             .card { padding: 16px; border-radius: 14px; }
+            /* Приоритетные полосы на мобиле (карточный вид) */
+            table tbody tr[data-priority="Высокий"] { border-left: 4px solid #ff3b30 !important; }
+            table tbody tr[data-priority="Средний"]  { border-left: 4px solid #ff9500 !important; }
+            table tbody tr[data-priority="Низкий"]   { border-left: 4px solid #34c759 !important; }
 
             .add-fields-grid { grid-template-columns: 1fr 1fr; }
 
@@ -658,7 +700,7 @@
     <table>
         <thead>
             <tr>
-                <th>#</th>
+                <th style="width:4px;padding:0;"></th>
                 <th>Задача</th>
                 <th>Исполнитель</th>
                 <th>Приоритет</th>
@@ -676,15 +718,15 @@
             {% if cat != ns.cur_cat %}
                 {% set ns.cur_cat = cat %}
                 {% set group_id = loop.index %}
-                <tr class="group-header" onclick="toggleGroup({{ group_id }})">
+                <tr class="group-header {% if task.category == 'Работа' %}group-work{% elif task.category == 'Личное' %}group-personal{% else %}group-none{% endif %}" onclick="toggleGroup({{ group_id }})">
                     <td colspan="9">
                         {{ '🏢 Работа' if task.category == 'Работа' else ('👤 Личное' if task.category == 'Личное' else '— Без категории') }}
                         <span class="group-toggle" id="toggle-{{ group_id }}">▼</span>
                     </td>
                 </tr>
             {% endif %}
-            <tr data-group="{{ loop.index0 }}" data-gid="{{ group_id }}">
-                <td class="date-text">{{ task.id }}</td>
+            <tr data-group="{{ loop.index0 }}" data-gid="{{ group_id }}" data-priority="{{ task.priority }}">
+                <td class="p-stripe p-stripe-{{ task.priority }}"></td>
                 <td data-label="Задача">
                     <div style="font-weight:500;">
                         {{ task.title }}
@@ -787,7 +829,7 @@
             {% endif %}
         {% endif %}
         <div class="done-row">
-            <span class="done-cat {{ 'category-work' if t.category == 'Работа' else 'category-personal' }}">
+            <span class="done-cat {{ 'category-work' if t.category == 'Работа' else ('category-personal' if t.category == 'Личное' else '') }}">
                 {{ '🏢' if t.category == 'Работа' else ('👤' if t.category == 'Личное' else '') }}
             </span>
             <span class="done-title">{{ t.title }}</span>
@@ -856,7 +898,7 @@
         {% else %}
             {% set days_ago = 999 %}
         {% endif %}
-        <div class="goal-card">
+        <div class="goal-card" data-area="{{ g.area }}">
             <div class="goal-header">
                 <div class="goal-title-wrap">
                     <span class="goal-title">{{ g.title }}</span>
