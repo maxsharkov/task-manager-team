@@ -414,9 +414,7 @@ def index():
 
             cur.execute("""
                 SELECT g.*,
-                    MAX(l.logged_at) AS last_log_date,
-                    (SELECT text FROM strategic_logs
-                     WHERE goal_id = g.id ORDER BY logged_at DESC, id DESC LIMIT 1) AS last_log_text
+                    MAX(l.logged_at) AS last_log_date
                 FROM strategic_goals g
                 LEFT JOIN strategic_logs l ON l.goal_id = g.id
                 GROUP BY g.id
@@ -424,11 +422,21 @@ def index():
             """)
             strategic_goals = cur.fetchall()
 
+            # Загружаем все логи по каждой цели
+            goal_logs = {}
+            for g in strategic_goals:
+                cur.execute("""
+                    SELECT text, logged_at FROM strategic_logs
+                    WHERE goal_id = %s ORDER BY logged_at DESC, id DESC
+                """, (g['id'],))
+                goal_logs[g['id']] = cur.fetchall()
+
     return render_template(
         "index.html",
         tasks=tasks,
         done_tasks=done_tasks,
         strategic_goals=strategic_goals,
+        goal_logs=goal_logs,
         statuses=STATUSES,
         priorities=PRIORITIES,
         energies=ENERGIES,
@@ -557,6 +565,59 @@ def strategy_digest_manual():
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/strategy/analyze", methods=["POST"])
+def strategy_analyze():
+    today = date.today().isoformat()
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT * FROM strategic_goals ORDER BY area, title")
+            goals = cur.fetchall()
+            if not goals:
+                return jsonify({"summary": "Стратегических целей пока нет."})
+            goal_logs = {}
+            for g in goals:
+                cur.execute("""
+                    SELECT text, logged_at FROM strategic_logs
+                    WHERE goal_id = %s ORDER BY logged_at ASC, id ASC
+                """, (g['id'],))
+                goal_logs[g['id']] = cur.fetchall()
+
+    lines = []
+    for g in goals:
+        logs = goal_logs.get(g['id'], [])
+        if logs:
+            log_entries = "\n".join(f"  [{l['logged_at']}] {l['text']}" for l in logs)
+        else:
+            log_entries = "  Записей нет"
+        lines.append(f"[{g['area']}] «{g['title']}»\n{log_entries}")
+
+    goals_text = "\n\n".join(lines)
+
+    response = openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "system",
+                "content": "Ты жёсткий честный коуч топ-менеджера. Отвечай на русском, структурированно, без воды и лести."
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Сегодня {today}. Стратегические цели и история всех записей:\n\n{goals_text}\n\n"
+                    "Дай полный анализ:\n"
+                    "1. По каждой области (Бизнес, Карьера, Люди, Нетворкинг, Личное) — краткий статус: что движется, что стоит.\n"
+                    "2. Топ-3 цели с наилучшим прогрессом — отметь конкретно.\n"
+                    "3. Топ-3 застывших цели — назови следующее конкретное действие для каждой.\n"
+                    "4. Главный паттерн: что системно игнорируется.\n"
+                    "5. Одна рекомендация на эту неделю — конкретная и измеримая."
+                )
+            }
+        ]
+    )
+
+    return jsonify({"summary": response.choices[0].message.content})
 
 
 @app.route("/add", methods=["POST"])
