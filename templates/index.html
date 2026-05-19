@@ -643,7 +643,7 @@
 <div class="card">
     <form class="search-wrap" method="get" id="searchForm">
         <input type="text" class="search-input" name="q" id="searchInput"
-               value="{{ search_query }}" placeholder="🔍  Поиск по задачам..."
+               value="{{ search_query }}" placeholder="🔍 Поиск (Enter) или запрос для ✦ AI поиска"
                autocomplete="off">
         <input type="hidden" name="tab" value="tasks">
         <button type="button" class="btn-ai-search" id="aiSearchBtn" onclick="runAiSearch()">✦ AI поиск</button>
@@ -965,10 +965,13 @@ function switchTab(tabName) {
 })();
 
 // ── Поиск ──────────────────────────────────────────────────
-let searchTimer = null;
-document.getElementById("searchInput").addEventListener("input", function() {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => { document.getElementById("searchForm").submit(); }, 1500);
+// Обычный поиск — только по Enter (ILIKE по заголовку/исполнителю)
+// AI поиск — кнопкой ✦ AI поиск (семантический, не перезагружает страницу)
+document.getElementById("searchInput").addEventListener("keydown", function(e) {
+    if (e.key === "Enter") {
+        e.preventDefault();
+        document.getElementById("searchForm").submit();
+    }
 });
 
 async function runAiSearch() {
