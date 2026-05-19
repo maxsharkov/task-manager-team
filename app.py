@@ -493,8 +493,11 @@ def strategy_delete(goal_id):
 
 @app.route("/gcal-resync", methods=["POST"])
 def gcal_resync():
-    """Пересоздаёт Calendar-события для активных повторяющихся задач с RRULE."""
+    """Пересоздаёт Calendar-события для активных повторяющихся задач с RRULE.
+    Если дедлайн в прошлом — сдвигает до ближайшего предстоящего."""
     updated = 0
+    errors = []
+    today_str = date.today().isoformat()
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
@@ -504,17 +507,46 @@ def gcal_resync():
             """)
             tasks = cur.fetchall()
             for t in tasks:
+                # Удаляем старое событие
                 if t["calendar_event_id"]:
                     gcal.delete_event(t["calendar_event_id"])
+                # Если дедлайн в прошлом — двигаем до ближайшего будущего
+                dl = t["deadline"]
+                while dl and str(dl) < today_str:
+                    dl = calc_next_deadline(dl, t["recurrence"])
+                if not dl:
+                    continue
                 new_id = gcal.create_event(
-                    t["title"], t["deadline"], t["priority"],
+                    t["title"], dl, t["priority"],
                     None, t["assignee"], t["recurrence"]
                 )
-                cur.execute("UPDATE tasks SET calendar_event_id=%s WHERE id=%s",
-                            (new_id, t["id"]))
+                cur.execute(
+                    "UPDATE tasks SET calendar_event_id=%s, deadline=%s WHERE id=%s",
+                    (new_id, dl, t["id"])
+                )
                 if new_id:
                     updated += 1
-    return jsonify({"ok": True, "updated": updated})
+                else:
+                    errors.append(t["title"])
+    return jsonify({"ok": True, "updated": updated, "errors": errors})
+
+
+@app.route("/gcal-cleanup", methods=["POST"])
+def gcal_cleanup():
+    """Удаляет Calendar-события у всех завершённых задач."""
+    cleaned = 0
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, calendar_event_id FROM tasks
+                WHERE status = 'Завершена' AND calendar_event_id IS NOT NULL
+            """)
+            tasks = cur.fetchall()
+            for t in tasks:
+                gcal.delete_event(t["calendar_event_id"])
+                cur.execute("UPDATE tasks SET calendar_event_id=NULL WHERE id=%s", (t["id"],))
+                cleaned += 1
+    return jsonify({"ok": True, "cleaned": cleaned})
 
 
 @app.route("/strategy/digest", methods=["POST"])

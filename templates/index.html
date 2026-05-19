@@ -60,11 +60,29 @@
         }
 
         /* ── Forms ───────────────────────────────────────────── */
-        .add-form {
+        .add-form-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            user-select: none;
+            padding: 2px 0;
+        }
+        .add-form-toggle:hover { opacity: 0.8; }
+        .add-toggle-label { font-size: 0.92rem; font-weight: 600; color: #0071e3; }
+        .add-toggle-icon {
+            font-size: 0.65rem; opacity: 0.45;
+            transition: transform 0.2s;
+        }
+        .add-toggle-icon.open { transform: rotate(180deg); }
+
+        .add-form-body { padding-top: 14px; }
+
+        .add-title-row { margin-bottom: 10px; }
+        .add-fields-grid {
             display: grid;
-            grid-template-columns: 1fr auto auto auto auto auto;
+            grid-template-columns: repeat(4, 1fr);
             gap: 10px;
-            align-items: end;
         }
         .add-form .field { display: flex; flex-direction: column; gap: 5px; }
         .add-form-row2 {
@@ -427,10 +445,7 @@
             .container { padding: 16px 12px; }
             .card { padding: 16px; border-radius: 14px; }
 
-            .add-form { grid-template-columns: 1fr 1fr; }
-            .add-form .field:first-child { grid-column: 1 / -1; }
-            .add-form .field:last-child  { grid-column: 1 / -1; }
-            .add-form-row2 { grid-template-columns: 1fr; }
+            .add-fields-grid { grid-template-columns: 1fr 1fr; }
 
             .btn-add, .btn-analyze, .btn-digest-daily, .btn-digest-weekly, .btn-voice {
                 width: 100%; justify-content: center;
@@ -501,7 +516,8 @@
         <button class="btn-analyze" id="analyzeBtn" onclick="analyzeTasks()">🤖 Анализ задач</button>
         <button class="btn-digest-daily" id="digestDailyBtn" onclick="sendDigest('daily')">📬 Дайджест сейчас</button>
         <button class="btn-digest-weekly" id="digestWeeklyBtn" onclick="sendDigest('weekly')">📊 Итоги недели</button>
-        <button style="background:rgba(0,0,0,0.05);color:#1d1d1f;" id="resyncBtn" onclick="resyncGcal()">🔄 Синхр. календарь</button>
+        <button style="background:rgba(0,0,0,0.05);color:#1d1d1f;" id="resyncBtn" onclick="resyncGcal()">🔄 Синхр. повторения</button>
+        <button style="background:rgba(255,59,48,0.08);color:#c0392b;" id="cleanupBtn" onclick="cleanupGcal()">🗑 Очистить завершённые</button>
         <span id="analyzeStatus" style="color:#6e6e73; font-size:0.82rem;"></span>
     </div>
     <div style="margin-top:8px; font-size:0.72rem; color:#6e6e73; letter-spacing:0.01em;">
@@ -512,79 +528,86 @@
     </div>
 </div>
 
-<!-- Форма добавления -->
+<!-- Форма добавления (свёрнута) -->
 <div class="card">
-    <div class="voice-bar">
-        <button type="button" class="btn-voice" id="voiceBtn" onclick="toggleRecording()">
-            🎙 Надиктовать задачу
-        </button>
-        <span class="voice-status" id="voiceStatus"></span>
+    <div class="add-form-toggle" onclick="toggleAddForm()">
+        <span class="add-toggle-label">+ Новая задача</span>
+        <span class="add-toggle-icon" id="addFormIcon">▼</span>
     </div>
-    <div class="voice-preview" id="voicePreview"></div>
 
-    <form id="addForm" action="/add" method="post">
-        <div class="add-form">
-            <div class="field" style="grid-column:1;">
+    <div class="add-form-body" id="addFormBody" style="display:none;">
+        <div class="voice-bar">
+            <button type="button" class="btn-voice" id="voiceBtn" onclick="toggleRecording()">
+                🎙 Надиктовать
+            </button>
+            <span class="voice-status" id="voiceStatus"></span>
+        </div>
+        <div class="voice-preview" id="voicePreview"></div>
+
+        <form id="addForm" action="/add" method="post" class="add-form">
+            <!-- Название — полная ширина -->
+            <div class="field add-title-row">
                 <label>Задача</label>
                 <input type="text" name="title" id="fieldTitle" placeholder="Название задачи" required>
             </div>
-            <div class="field">
-                <label>Статус</label>
-                <select name="status" id="fieldStatus">
-                    {% for s in statuses %}
-                    <option value="{{ s }}">{{ s }}</option>
-                    {% endfor %}
-                </select>
+            <!-- Все остальные поля — одинаковый размер, 4 в ряд -->
+            <div class="add-fields-grid">
+                <div class="field">
+                    <label>Статус</label>
+                    <select name="status" id="fieldStatus">
+                        {% for s in statuses %}
+                        <option value="{{ s }}">{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Приоритет</label>
+                    <select name="priority" id="fieldPriority">
+                        {% for p in priorities %}
+                        <option value="{{ p }}" {% if p == 'Средний' %}selected{% endif %}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Усилия</label>
+                    <select name="energy" id="fieldEnergy">
+                        {% for e in energies %}
+                        <option value="{{ e }}" {% if e == 'Средняя' %}selected{% endif %}>{{ e }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Дедлайн</label>
+                    <input type="date" name="deadline" id="fieldDeadline">
+                </div>
+                <div class="field">
+                    <label>Исполнитель</label>
+                    <input type="text" name="assignee" id="fieldAssignee" placeholder="Исполнитель">
+                </div>
+                <div class="field">
+                    <label>Повторение</label>
+                    <select name="recurrence" id="fieldRecurrence">
+                        <option value="">Не повторяется</option>
+                        {% for r in recurrences %}
+                        <option value="{{ r }}">{{ r }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Категория</label>
+                    <select name="category" id="fieldCategory">
+                        {% for c in categories %}
+                        <option value="{{ c }}">{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
-            <div class="field">
-                <label>Приоритет</label>
-                <select name="priority" id="fieldPriority">
-                    {% for p in priorities %}
-                    <option value="{{ p }}" {% if p == 'Средний' %}selected{% endif %}>{{ p }}</option>
-                    {% endfor %}
-                </select>
+            <!-- Кнопка внизу -->
+            <div style="margin-top:14px; display:flex; justify-content:flex-end;">
+                <button type="submit" class="btn-add">+ Добавить задачу</button>
             </div>
-            <div class="field">
-                <label>Усилия</label>
-                <select name="energy" id="fieldEnergy">
-                    {% for e in energies %}
-                    <option value="{{ e }}" {% if e == 'Средняя' %}selected{% endif %}>{{ e }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="field">
-                <label>Дедлайн</label>
-                <input type="date" name="deadline" id="fieldDeadline" min="{{ today.isoformat() }}">
-            </div>
-            <div class="field">
-                <label>&nbsp;</label>
-                <button type="submit" class="btn-add">+ Добавить</button>
-            </div>
-        </div>
-        <div class="add-form-row2">
-            <div class="field">
-                <label>Исполнитель</label>
-                <input type="text" name="assignee" id="fieldAssignee" placeholder="Кто должен сделать...">
-            </div>
-            <div class="field">
-                <label>Повторение</label>
-                <select name="recurrence" id="fieldRecurrence">
-                    <option value="">Не повторяется</option>
-                    {% for r in recurrences %}
-                    <option value="{{ r }}">{{ r }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="field">
-                <label>Категория</label>
-                <select name="category" id="fieldCategory">
-                    {% for c in categories %}
-                    <option value="{{ c }}">{{ c }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-        </div>
-    </form>
+        </form>
+    </div>
 </div>
 
 <!-- Поиск -->
@@ -891,6 +914,15 @@
 </div><!-- /container -->
 
 <script>
+// ── Форма добавления задачи ────────────────────────────────
+let addFormOpen = false;
+function toggleAddForm() {
+    addFormOpen = !addFormOpen;
+    document.getElementById("addFormBody").style.display = addFormOpen ? "block" : "none";
+    const icon = document.getElementById("addFormIcon");
+    if (icon) icon.classList.toggle("open", addFormOpen);
+}
+
 // ── Таб-переключение ───────────────────────────────────────
 function switchTab(tabName) {
     document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
@@ -967,8 +999,26 @@ async function resyncGcal() {
     try {
         const res  = await fetch("/gcal-resync", { method:"POST" });
         const data = await res.json();
+        const errMsg = data.errors?.length ? ` (ошибки: ${data.errors.join(", ")})` : "";
         statusEl.textContent = data.ok
-            ? `✓ Обновлено событий: ${data.updated}`
+            ? `✓ Обновлено: ${data.updated}${errMsg}`
+            : "Ошибка: " + data.error;
+    } catch(e) { statusEl.textContent = "Ошибка"; }
+    finally {
+        btn.disabled = false;
+        setTimeout(() => { statusEl.textContent = ""; }, 5000);
+    }
+}
+
+async function cleanupGcal() {
+    const btn = document.getElementById("cleanupBtn");
+    const statusEl = document.getElementById("analyzeStatus");
+    btn.disabled = true; statusEl.textContent = "Удаляю из календаря...";
+    try {
+        const res  = await fetch("/gcal-cleanup", { method:"POST" });
+        const data = await res.json();
+        statusEl.textContent = data.ok
+            ? `✓ Удалено событий: ${data.cleaned}`
             : "Ошибка: " + data.error;
     } catch(e) { statusEl.textContent = "Ошибка"; }
     finally {
@@ -1017,6 +1067,8 @@ async function toggleRecording() {
 }
 
 async function startRecording() {
+    // Раскрываем форму если свёрнута
+    if (!addFormOpen) toggleAddForm();
     const btn = document.getElementById("voiceBtn");
     const statusEl = document.getElementById("voiceStatus");
     try {
