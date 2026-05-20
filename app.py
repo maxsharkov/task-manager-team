@@ -1028,6 +1028,38 @@ def ai_search():
     return jsonify(result)
 
 
+@app.route("/api/calendar-tasks")
+def calendar_tasks():
+    _PRIORITY_COLOR = {"Высокий": "#ff3b30", "Средний": "#ff9500", "Низкий": "#34c759"}
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, title, priority, category, status, deadline, assignee, energy, progress
+                FROM tasks
+                WHERE status != 'Завершена' AND deadline IS NOT NULL
+                ORDER BY deadline
+            """)
+            tasks = cur.fetchall()
+    events = []
+    for t in tasks:
+        events.append({
+            "id": t["id"],
+            "title": t["title"],
+            "start": str(t["deadline"]),
+            "color": _PRIORITY_COLOR.get(t["priority"], "#aeaeb2"),
+            "textColor": "white",
+            "extendedProps": {
+                "priority": t["priority"] or "",
+                "category": t["category"] or "",
+                "status": t["status"] or "",
+                "assignee": t["assignee"] or "",
+                "energy": t["energy"] or "",
+                "progress": t["progress"] or "",
+            }
+        })
+    return jsonify(events)
+
+
 @app.route("/digest", methods=["POST"])
 def digest_manual():
     digest_type = request.json.get("type", "daily") if request.is_json else "daily"
