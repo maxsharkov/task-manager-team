@@ -342,9 +342,13 @@
             padding: 5px;
             border: 1px solid rgba(0,0,0,0.06);
             box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
         }
+        .tab-bar::-webkit-scrollbar { display: none; }
         .tab-btn {
-            flex: 1;
+            flex: 0 0 auto;
             padding: 9px 16px;
             border: none;
             border-radius: 10px;
@@ -355,6 +359,7 @@
             cursor: pointer;
             transition: all 0.18s;
             font-family: inherit;
+            white-space: nowrap;
         }
         .tab-btn.active {
             background: white;
@@ -690,6 +695,18 @@
             table tbody tr[data-priority="Высокий"] { border-left: 4px solid #ff3b30 !important; }
             table tbody tr[data-priority="Средний"]  { border-left: 4px solid #ff9500 !important; }
             table tbody tr[data-priority="Низкий"]   { border-left: 4px solid #34c759 !important; }
+            /* Таб-бар на мобиле */
+            .tab-btn { padding: 8px 12px; font-size: 0.82rem; }
+            /* Календарь на мобиле */
+            .calendar-wrap { min-height: 400px; }
+            .fc .fc-toolbar { flex-wrap: wrap; gap: 6px; }
+            .fc .fc-toolbar-title { font-size: 0.92rem; }
+            .fc .fc-list-event-title { font-size: 0.85rem; }
+            .fc .fc-list-day-text, .fc .fc-list-day-side-text { font-size: 0.82rem; }
+            /* Легенда цветов на мобиле */
+            .cal-legend { font-size: 0.7rem; }
+            /* Попап на мобиле */
+            .task-popup { padding: 18px; border-radius: 16px; }
 
             .add-fields-grid { grid-template-columns: 1fr 1fr; }
 
@@ -1158,7 +1175,7 @@
 <div class="card">
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
         <button class="cal-view-btn active" id="calBtnMonth" onclick="setCalView('dayGridMonth')">Месяц</button>
-        <button class="cal-view-btn" id="calBtnWeek" onclick="setCalView('timeGridWeek')">Неделя</button>
+        <button class="cal-view-btn" id="calBtnWeek" onclick="setCalView('dayGridWeek')">Неделя</button>
         <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
             <span style="font-size:0.75rem; color:#6e6e73;">
                 <span style="display:inline-block;width:10px;height:10px;background:#ff3b30;border-radius:50%;margin-right:4px;"></span>Высокий
@@ -1451,6 +1468,7 @@ function toggleEditForm(goalId) {
 // ── Календарь ──────────────────────────────────────────────
 let calendarInstance = null;
 let calCurrentView = 'dayGridMonth';
+const CAL_WEEK_VIEW = () => window.innerWidth < 768 ? 'listWeek' : 'dayGridWeek';
 
 async function initCalendar() {
     if (calendarInstance) {
@@ -1466,23 +1484,28 @@ async function initCalendar() {
         events = await res.json();
     } catch(e) { console.error('Calendar fetch error', e); }
 
+    const isMobile = window.innerWidth < 768;
     calendarInstance = new FullCalendar.Calendar(el, {
         locale: 'ru',
-        initialView: calCurrentView,
+        initialView: isMobile ? 'listMonth' : 'dayGridMonth',
         headerToolbar: {
             left:   'prev,next today',
             center: 'title',
             right:  ''
         },
         height: 'auto',
-        firstDay: 1,          // понедельник
+        firstDay: 1,
         events: events,
         eventClick: function(info) { showTaskPopup(info); },
         eventDidMount: function(info) {
             info.el.title = info.event.title;
         },
-        dayMaxEvents: 4,
+        dayMaxEvents: isMobile ? 2 : 4,
         nowIndicator: true,
+        // List view styling
+        listDayFormat: { weekday: 'long', day: 'numeric', month: 'long' },
+        listDaySideFormat: false,
+        noEventsText: 'Задач с дедлайнами нет',
     });
     calendarInstance.render();
 }
@@ -1491,7 +1514,12 @@ function setCalView(view) {
     calCurrentView = view;
     document.querySelectorAll('.cal-view-btn').forEach(b => b.classList.remove('active'));
     document.getElementById(view === 'dayGridMonth' ? 'calBtnMonth' : 'calBtnWeek').classList.add('active');
-    if (calendarInstance) calendarInstance.changeView(view);
+    if (calendarInstance) {
+        // На мобиле неделя → список, иначе dayGridWeek
+        const isMobile = window.innerWidth < 768;
+        const actualView = (view === 'dayGridWeek' && isMobile) ? 'listWeek' : view;
+        calendarInstance.changeView(actualView);
+    }
 }
 
 // ── Попап задачи ───────────────────────────────────────────
