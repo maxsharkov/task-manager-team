@@ -691,28 +691,44 @@
             .site-header { padding: 0 16px; }
             .container { padding: 16px 12px; }
             .card { padding: 16px; border-radius: 14px; }
-            /* Приоритетные полосы на мобиле (карточный вид) */
+            /* Приоритетные полосы на мобиле */
             table tbody tr[data-priority="Высокий"] { border-left: 4px solid #ff3b30 !important; }
             table tbody tr[data-priority="Средний"]  { border-left: 4px solid #ff9500 !important; }
             table tbody tr[data-priority="Низкий"]   { border-left: 4px solid #34c759 !important; }
-            /* Таб-бар на мобиле */
-            .tab-btn { padding: 8px 12px; font-size: 0.82rem; }
-            /* Календарь на мобиле */
-            .calendar-wrap { min-height: 400px; }
-            .fc .fc-toolbar { flex-wrap: wrap; gap: 6px; }
-            .fc .fc-toolbar-title { font-size: 0.92rem; }
-            .fc .fc-list-event-title { font-size: 0.85rem; }
-            .fc .fc-list-day-text, .fc .fc-list-day-side-text { font-size: 0.82rem; }
-            /* Легенда цветов на мобиле */
-            .cal-legend { font-size: 0.7rem; }
-            /* Попап на мобиле */
-            .task-popup { padding: 18px; border-radius: 16px; }
+
+            /* Таб-бар: 2×2 сетка на мобиле */
+            .tab-bar {
+                flex-wrap: wrap;
+                overflow-x: visible;
+            }
+            .tab-btn {
+                flex: 1 1 calc(50% - 4px);
+                padding: 8px 6px;
+                font-size: 0.78rem;
+                text-align: center;
+            }
+
+            /* Кнопки действий: компактный flex-wrap, не full-width */
+            .btn-analyze, .btn-digest-daily, .btn-digest-weekly,
+            .btn-resync, .btn-cleanup {
+                font-size: 0.8rem;
+                padding: 8px 12px;
+            }
+            /* Только «+ Добавить» и «Надиктовать» — full width */
+            .btn-add, .btn-voice {
+                width: 100%; justify-content: center;
+            }
 
             .add-fields-grid { grid-template-columns: 1fr 1fr; }
 
-            .btn-add, .btn-analyze, .btn-digest-daily, .btn-digest-weekly, .btn-voice {
-                width: 100%; justify-content: center;
-            }
+            /* Календарь на мобиле */
+            .calendar-wrap { min-height: 400px; }
+            .fc .fc-toolbar { flex-wrap: wrap; gap: 6px; }
+            .fc .fc-toolbar-title { font-size: 0.9rem; }
+            .fc .fc-list-event-title { font-size: 0.85rem; }
+            .fc .fc-list-day-text { font-size: 0.8rem; }
+            /* Попап на мобиле */
+            .task-popup { padding: 18px; border-radius: 16px; }
 
             .table-wrap { overflow-x: visible; }
             table thead { display: none; }
