@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Таск-менеджер</title>
     <link rel="manifest" href="/static/manifest.json">
+    <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css' rel='stylesheet'>
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+    <script src='https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.11/locales/ru.global.min.js'></script>
     <meta name="theme-color" content="#0071e3">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -501,6 +504,178 @@
         }
         .log-entry:first-child .log-text { color: #3a3a3c; font-style: normal; font-weight: 500; }
 
+        /* ── Calendar ───────────────────────────────────────── */
+        .calendar-wrap {
+            min-height: 560px;
+        }
+        .cal-view-btn {
+            background: rgba(0,0,0,0.05);
+            color: #6e6e73;
+            border: none;
+            border-radius: 8px;
+            padding: 7px 16px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.15s;
+        }
+        .cal-view-btn.active {
+            background: #0071e3;
+            color: white;
+        }
+        .cal-view-btn:hover:not(.active) { background: rgba(0,0,0,0.1); }
+
+        /* FullCalendar overrides */
+        .fc { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+        .fc .fc-toolbar-title { font-size: 1rem; font-weight: 600; color: #1d1d1f; }
+        .fc .fc-button {
+            background: rgba(0,0,0,0.05) !important;
+            border: none !important;
+            color: #1d1d1f !important;
+            border-radius: 8px !important;
+            font-family: inherit !important;
+            font-size: 0.82rem !important;
+            box-shadow: none !important;
+        }
+        .fc .fc-button:hover { background: rgba(0,0,0,0.12) !important; }
+        .fc .fc-button-active { background: #0071e3 !important; color: white !important; }
+        .fc .fc-daygrid-day-number { font-size: 0.82rem; color: #6e6e73; }
+        .fc .fc-col-header-cell-cushion { font-size: 0.78rem; font-weight: 600; color: #6e6e73; text-transform: uppercase; letter-spacing: 0.04em; text-decoration: none; }
+        .fc-day-today { background: rgba(0,113,227,0.04) !important; }
+        .fc-day-today .fc-daygrid-day-number { color: #0071e3; font-weight: 700; }
+        .fc-event {
+            border: none !important;
+            border-radius: 6px !important;
+            font-size: 0.78rem !important;
+            font-weight: 600 !important;
+            padding: 2px 6px !important;
+            cursor: pointer;
+        }
+        .fc-event:hover { opacity: 0.88; }
+        .fc-daygrid-event-dot { display: none; }
+
+        /* ── Task Popup ──────────────────────────────────────── */
+        .task-popup-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.3);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            z-index: 500;
+        }
+        .task-popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.95);
+            width: min(420px, calc(100vw - 32px));
+            background: rgba(255,255,255,0.97);
+            backdrop-filter: saturate(180%) blur(20px);
+            border-radius: 20px;
+            padding: 24px;
+            z-index: 501;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.2);
+            transition: transform 0.18s ease, opacity 0.18s ease;
+            opacity: 0;
+        }
+        .task-popup.visible {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+        }
+        .task-popup-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .task-popup-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #1d1d1f;
+            line-height: 1.35;
+            flex: 1;
+        }
+        .task-popup-close {
+            background: rgba(0,0,0,0.06);
+            border: none;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 0.78rem;
+            color: #6e6e73;
+            flex-shrink: 0;
+            padding: 0;
+            transition: background 0.12s;
+        }
+        .task-popup-close:hover { background: rgba(0,0,0,0.12); }
+        .task-popup-badges {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+        .task-popup-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            margin-bottom: 18px;
+            font-size: 0.86rem;
+        }
+        .popup-meta-row {
+            display: flex;
+            gap: 8px;
+            align-items: baseline;
+        }
+        .popup-meta-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #aeaeb2;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            min-width: 80px;
+            flex-shrink: 0;
+        }
+        .popup-meta-value { color: #3a3a3c; }
+        .task-popup-actions { display: flex; gap: 8px; }
+        .btn-popup-edit {
+            background: #0071e3;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 9px 20px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: opacity 0.15s;
+        }
+        .btn-popup-edit:hover { opacity: 0.85; }
+        .btn-popup-cancel {
+            background: rgba(0,0,0,0.06);
+            color: #1d1d1f;
+            border: none;
+            border-radius: 10px;
+            padding: 9px 16px;
+            font-size: 0.88rem;
+            font-weight: 500;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.12s;
+        }
+        .btn-popup-cancel:hover { background: rgba(0,0,0,0.1); }
+
         /* ── Responsive ──────────────────────────────────────── */
         @media (max-width: 900px) {
             th:first-child, td:first-child { display: none; }
@@ -574,6 +749,7 @@
     <button class="tab-btn" data-tab="tasks" onclick="switchTab('tasks')">📋 Задачи</button>
     <button class="tab-btn" data-tab="done" onclick="switchTab('done')">✅ Выполнено</button>
     <button class="tab-btn" data-tab="strategy" onclick="switchTab('strategy')">🧭 Стратегия</button>
+    <button class="tab-btn" data-tab="calendar" onclick="switchTab('calendar')">📅 Календарь</button>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
@@ -975,6 +1151,40 @@
 
 </div><!-- /tab-strategy -->
 
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- ВКЛ. КАЛЕНДАРЬ                                        -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-pane" id="tab-calendar">
+<div class="card">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
+        <button class="cal-view-btn active" id="calBtnMonth" onclick="setCalView('dayGridMonth')">Месяц</button>
+        <button class="cal-view-btn" id="calBtnWeek" onclick="setCalView('timeGridWeek')">Неделя</button>
+        <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+            <span style="font-size:0.75rem; color:#6e6e73;">
+                <span style="display:inline-block;width:10px;height:10px;background:#ff3b30;border-radius:50%;margin-right:4px;"></span>Высокий
+                <span style="display:inline-block;width:10px;height:10px;background:#ff9500;border-radius:50%;margin:0 4px 0 10px;"></span>Средний
+                <span style="display:inline-block;width:10px;height:10px;background:#34c759;border-radius:50%;margin:0 4px 0 10px;"></span>Низкий
+            </span>
+        </div>
+    </div>
+    <div class="calendar-wrap">
+        <div id="calendarEl"></div>
+    </div>
+</div>
+</div><!-- /tab-calendar -->
+
+<!-- ── Попап задачи ───────────────────────────────────────── -->
+<div class="task-popup-backdrop" id="taskPopupBackdrop" onclick="closeTaskPopup()"></div>
+<div class="task-popup" id="taskPopup">
+    <div class="task-popup-header">
+        <div class="task-popup-title" id="popupTitle"></div>
+        <button class="task-popup-close" onclick="closeTaskPopup()">✕</button>
+    </div>
+    <div class="task-popup-badges" id="popupBadges"></div>
+    <div class="task-popup-meta" id="popupMeta"></div>
+    <div class="task-popup-actions" id="popupActions"></div>
+</div>
+
 </div><!-- /container -->
 
 <script>
@@ -998,6 +1208,7 @@ function switchTab(tabName) {
     const url = new URL(location.href);
     url.searchParams.set('tab', tabName);
     history.replaceState({}, '', url);
+    if (tabName === 'calendar') initCalendar();
 }
 
 // Активируем нужный таб при загрузке
@@ -1236,6 +1447,106 @@ function toggleEditForm(goalId) {
     form.style.display = visible ? 'none' : 'block';
     if (!visible) form.querySelector('input[name="title"]').focus();
 }
+
+// ── Календарь ──────────────────────────────────────────────
+let calendarInstance = null;
+let calCurrentView = 'dayGridMonth';
+
+async function initCalendar() {
+    if (calendarInstance) {
+        calendarInstance.render();
+        return;
+    }
+    const el = document.getElementById('calendarEl');
+    if (!el || typeof FullCalendar === 'undefined') return;
+
+    let events = [];
+    try {
+        const res = await fetch('/api/calendar-tasks');
+        events = await res.json();
+    } catch(e) { console.error('Calendar fetch error', e); }
+
+    calendarInstance = new FullCalendar.Calendar(el, {
+        locale: 'ru',
+        initialView: calCurrentView,
+        headerToolbar: {
+            left:   'prev,next today',
+            center: 'title',
+            right:  ''
+        },
+        height: 'auto',
+        firstDay: 1,          // понедельник
+        events: events,
+        eventClick: function(info) { showTaskPopup(info); },
+        eventDidMount: function(info) {
+            info.el.title = info.event.title;
+        },
+        dayMaxEvents: 4,
+        nowIndicator: true,
+    });
+    calendarInstance.render();
+}
+
+function setCalView(view) {
+    calCurrentView = view;
+    document.querySelectorAll('.cal-view-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(view === 'dayGridMonth' ? 'calBtnMonth' : 'calBtnWeek').classList.add('active');
+    if (calendarInstance) calendarInstance.changeView(view);
+}
+
+// ── Попап задачи ───────────────────────────────────────────
+function showTaskPopup(info) {
+    const ev   = info.event;
+    const p    = ev.extendedProps;
+    const id   = ev.id;
+
+    document.getElementById('popupTitle').textContent = ev.title;
+
+    // Бейджи
+    const priorityColors = { 'Высокий': '#ff3b30', 'Средний': '#ff9500', 'Низкий': '#34c759' };
+    const catColors      = { 'Работа': '#0071e3', 'Личное': '#bf5af2' };
+    let badges = '';
+    if (p.priority) badges += `<span class="badge" style="background:${priorityColors[p.priority]||'#aeaeb2'};color:white">${p.priority}</span>`;
+    if (p.category) badges += `<span class="badge" style="background:${catColors[p.category]||'#aeaeb2'};color:white">${p.category === 'Работа' ? '🏢' : '👤'} ${p.category}</span>`;
+    if (p.energy)   badges += `<span class="badge energy-${p.energy}">${p.energy}</span>`;
+    document.getElementById('popupBadges').innerHTML = badges;
+
+    // Мета-поля
+    const startStr = ev.startStr || '';
+    let meta = `<div class="popup-meta-row"><span class="popup-meta-label">Дедлайн</span><span class="popup-meta-value">${startStr}</span></div>`;
+    meta += `<div class="popup-meta-row"><span class="popup-meta-label">Статус</span><span class="popup-meta-value">${p.status}</span></div>`;
+    if (p.assignee) meta += `<div class="popup-meta-row"><span class="popup-meta-label">Исполнитель</span><span class="popup-meta-value">${p.assignee}</span></div>`;
+    if (p.progress) meta += `<div class="popup-meta-row"><span class="popup-meta-label">Прогресс</span><span class="popup-meta-value">${p.progress}</span></div>`;
+    document.getElementById('popupMeta').innerHTML = meta;
+
+    // Кнопки
+    document.getElementById('popupActions').innerHTML = `
+        <a href="/edit/${id}" class="btn-popup-edit">✎ Редактировать</a>
+        <button class="btn-popup-cancel" onclick="closeTaskPopup()">Закрыть</button>
+    `;
+
+    // Показываем
+    const backdrop = document.getElementById('taskPopupBackdrop');
+    const popup    = document.getElementById('taskPopup');
+    backdrop.style.display = 'block';
+    popup.style.display    = 'block';
+    requestAnimationFrame(() => popup.classList.add('visible'));
+}
+
+function closeTaskPopup() {
+    const popup    = document.getElementById('taskPopup');
+    const backdrop = document.getElementById('taskPopupBackdrop');
+    popup.classList.remove('visible');
+    setTimeout(() => {
+        popup.style.display    = 'none';
+        backdrop.style.display = 'none';
+    }, 180);
+}
+
+// Закрытие попапа по Escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeTaskPopup();
+});
 
 // ── Service Worker ─────────────────────────────────────────
 if ("serviceWorker" in navigator) {
