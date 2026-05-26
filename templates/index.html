@@ -420,11 +420,16 @@
         .goal-card:last-child { border-bottom: none; }
         .goal-card:hover { background: rgba(0,0,0,0.012); border-radius: 0 8px 8px 0; }
         /* Цвет полосы по направлению */
-        .goal-card[data-area="Бизнес"]     { border-left-color: #0071e3; }
-        .goal-card[data-area="Карьера"]    { border-left-color: #5e5ce6; }
-        .goal-card[data-area="Люди"]       { border-left-color: #34c759; }
-        .goal-card[data-area="Нетворкинг"] { border-left-color: #ff9500; }
-        .goal-card[data-area="Личное"]     { border-left-color: #bf5af2; }
+        .goal-card[data-area="Здоровье"]    { border-left-color: #34c759; }
+        .goal-card[data-area="Семья"]       { border-left-color: #ff2d55; }
+        .goal-card[data-area="Работа"]      { border-left-color: #0071e3; }
+        .goal-card[data-area="Технологии"]  { border-left-color: #5e5ce6; }
+        .goal-card[data-area="Люди"]        { border-left-color: #00b4d8; }
+        .goal-card[data-area="Мышление"]    { border-left-color: #af52de; }
+        .goal-card[data-area="Творчество"]  { border-left-color: #ff9500; }
+        .goal-card[data-area="Деньги"]      { border-left-color: #a2845e; }
+        .goal-card[data-area="Публичность"] { border-left-color: #ff3b30; }
+        .goal-card[data-area="Система"]     { border-left-color: #636366; }
         .goal-header {
             display: flex; align-items: flex-start;
             justify-content: space-between; gap: 12px;
@@ -440,11 +445,16 @@
             font-weight: 700;
             letter-spacing: 0.02em;
         }
-        .area-Бизнес      { background: #0071e3; color: white; }
-        .area-Карьера     { background: #5e5ce6; color: white; }
-        .area-Люди        { background: #34c759; color: white; }
-        .area-Нетворкинг  { background: #ff9500; color: white; }
-        .area-Личное      { background: #bf5af2; color: white; }
+        .area-Здоровье    { background: #34c759; color: white; }
+        .area-Семья       { background: #ff2d55; color: white; }
+        .area-Работа      { background: #0071e3; color: white; }
+        .area-Технологии  { background: #5e5ce6; color: white; }
+        .area-Люди        { background: #00b4d8; color: white; }
+        .area-Мышление    { background: #af52de; color: white; }
+        .area-Творчество  { background: #ff9500; color: white; }
+        .area-Деньги      { background: #a2845e; color: white; }
+        .area-Публичность { background: #ff3b30; color: white; }
+        .area-Система     { background: #636366; color: white; }
 
         .goal-activity {
             display: flex; align-items: center; gap: 6px;
@@ -1068,6 +1078,7 @@
     <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
         <button class="btn-digest-weekly" id="stratDigestBtn" onclick="sendStratDigest()">🧭 Обзор в Telegram</button>
         <button class="btn-analyze" id="stratAnalyzeBtn" onclick="analyzeStrategy()">🤖 Анализ целей</button>
+        <button class="btn-cleanup" id="stratResetBtn" onclick="resetStrategy()" style="font-size:0.82rem;">↺ Перезагрузить список</button>
         <span id="stratDigestStatus" style="color:#6e6e73; font-size:0.82rem;"></span>
     </div>
     <div style="margin-top:8px; font-size:0.72rem; color:#6e6e73;">
@@ -1353,6 +1364,25 @@ async function sendStratDigest() {
         btn.disabled = false;
         setTimeout(() => { statusEl.textContent = ""; }, 3500);
     }
+}
+
+// ── Перезагрузка стратегических целей ─────────────────────
+async function resetStrategy() {
+    if (!confirm('Удалить все текущие цели (включая записи) и загрузить новый список? Это действие необратимо.')) return;
+    const btn = document.getElementById('stratResetBtn');
+    const statusEl = document.getElementById('stratDigestStatus');
+    btn.disabled = true; statusEl.textContent = 'Перезагружаю...';
+    try {
+        const res  = await fetch('/strategy/reset', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+            statusEl.textContent = `✓ Загружено ${data.count} целей — обновляю страницу...`;
+            setTimeout(() => location.reload(), 1200);
+        } else {
+            statusEl.textContent = 'Ошибка: ' + (data.error || 'unknown');
+        }
+    } catch(e) { statusEl.textContent = 'Ошибка'; }
+    finally { btn.disabled = false; }
 }
 
 // ── Анализ стратегических целей на странице ────────────────
