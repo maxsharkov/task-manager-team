@@ -362,6 +362,12 @@ def build_strategic_digest():
     today = date.today()
     today_str = today.isoformat()
 
+    _AREA_EMOJI = {
+        "Здоровье": "💪", "Семья": "❤️", "Работа": "⚡", "Технологии": "🤖",
+        "Люди": "🤝", "Мышление": "🧠", "Творчество": "🎨", "Деньги": "💰",
+        "Публичность": "📣", "Система": "⚙️",
+    }
+
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("SELECT * FROM strategic_goals ORDER BY area, title")
@@ -373,47 +379,83 @@ def build_strategic_digest():
             for g in goals:
                 cur.execute("""
                     SELECT text, logged_at FROM strategic_logs
-                    WHERE goal_id = %s ORDER BY logged_at DESC, id DESC LIMIT 3
+                    WHERE goal_id = %s ORDER BY logged_at DESC, id DESC LIMIT 2
                 """, (g['id'],))
                 goal_logs[g['id']] = cur.fetchall()
 
-    lines = []
+    # Группировка по областям
+    from collections import defaultdict, OrderedDict
+    areas = OrderedDict()
+    for area in STRATEGIC_AREAS:
+        areas[area] = []
     for g in goals:
-        logs = goal_logs.get(g['id'], [])
-        if logs:
-            last_date = logs[0]['logged_at']
-            days_ago = (today - last_date).days
-            log_entries = "\n".join(f"  [{l['logged_at']}] {l['text']}" for l in logs)
-            activity = f"Последняя запись: {days_ago} дн. назад\n{log_entries}"
-        else:
-            days_ago = 999
-            activity = "Записей нет — цель ни разу не обновлялась"
-        lines.append(f"[{g['area']}] «{g['title']}»\n{activity}")
+        area = g['area'] or "Прочее"
+        if area not in areas:
+            areas[area] = []
+        areas[area].append(g)
 
-    goals_structured = "\n\n".join(lines)
+    block_lines = []
+    for area, area_goals in areas.items():
+        if not area_goals:
+            continue
+        active_7 = []    # цели с записью за последние 7 дней
+        active_30 = []   # цели с записью за 8–30 дней
+        silent = []      # цели без единой записи или молчат 30+ дней
 
-    prompt = f"""Ты жёсткий честный коуч топ-менеджера. Еженедельный стратегический обзор.
+        for g in area_goals:
+            logs = goal_logs.get(g['id'], [])
+            if logs:
+                last_date = logs[0]['logged_at']
+                days_ago = (today - last_date).days
+                if days_ago <= 7:
+                    active_7.append((g, logs, days_ago))
+                elif days_ago <= 30:
+                    active_30.append((g, logs, days_ago))
+                else:
+                    silent.append(g)
+            else:
+                silent.append(g)
+
+        emoji = _AREA_EMOJI.get(area, "•")
+        lines = [f"БЛОК: {emoji} {area} ({len(area_goals)} целей)"]
+        lines.append(f"Активных за 7 дней: {len(active_7)}")
+        for g, logs, days_ago in active_7:
+            for l in logs[:2]:
+                lines.append(f"  - «{g['title']}» [{l['logged_at']}]: {l['text'][:80]}")
+        lines.append(f"Молчат 8-30 дней: {len(active_30)}")
+        if active_30:
+            lines.append("  " + ", ".join(f"«{g['title']}»" for g, _, _ in active_30[:3]))
+        lines.append(f"Застой / нет записей: {len(silent)}")
+        block_lines.append("\n".join(lines))
+
+    goals_structured = "\n\n".join(block_lines)
+
+    prompt = f"""Ты честный жёсткий коуч топ-менеджера. Воскресный стратегический обзор.
 
 Сегодня {today_str}.
 
-Стратегические цели и активность:
+Данные по 10 стратегическим блокам:
 
 {goals_structured}
 
-Правила оценки каждой цели:
-- Запись за последние 7 дней → отметь прогресс, спроси "что дальше?"
-- 8-14 дней без записи → мягкий вызов: "что остановило?"
-- 15-30 дней → жёсткий вызов: назови конкретное следующее действие
-- 30+ дней → прямой вопрос: "Эта цель живая или ты её уже отпустил?"
+Задача: оцени каждый блок по шкале 0–10, где:
+- 0-3 → полный застой (нет активности)
+- 4-6 → слабое движение (1-2 цели из блока)
+- 7-8 → нормальный темп (половина целей активна)
+- 9-10 → сильное движение (большинство целей с записями за неделю)
 
 Структура ответа:
-🧭 СТРАТЕГИЧЕСКИЙ ОБЗОР
 
-По каждой цели — одна строка: статус + вопрос или комментарий.
+🧭 СТРАТЕГИЧЕСКИЙ ОБЗОР — {today_str}
 
-💪 ПРИЗНАНИЕ — что реально двигалось на этой неделе.
+[для каждого блока одна строка]:
+{{эмодзи}} {{Название}} — {{X}}/10 {{стрелка ↑/→/↓}} — {{одна фраза: что двигалось или что стоит}}
 
-📌 ГЛАВНЫЙ ВОПРОС НЕДЕЛИ — один сильный вопрос по самой застывшей зоне.
+Эмодзи для блоков: Здоровье💪 Семья❤️ Работа⚡ Технологии🤖 Люди🤝 Мышление🧠 Творчество🎨 Деньги💰 Публичность📣 Система⚙️
+
+📊 ИТОГ НЕДЕЛИ — средняя оценка по всем блокам, 1 предложение про общий тренд.
+
+📌 ГЛАВНЫЙ ВОПРОС — один сильный вопрос по самому застывшему блоку.
 
 Без воды. Без корпоративного языка. Максимально конкретно."""
 
