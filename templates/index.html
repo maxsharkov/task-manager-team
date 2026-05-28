@@ -8,6 +8,7 @@
     <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css' rel='stylesheet'>
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
     <script src='https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.11/locales/ru.global.min.js'></script>
+    <script src='https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js'></script>
     <meta name="theme-color" content="#0071e3">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -631,6 +632,77 @@
             transition: background 0.12s;
         }
         .task-popup-close:hover { background: rgba(0,0,0,0.12); }
+
+        /* ── Попап недели (стратегический обзор) ── */
+        .week-popup-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.3);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            z-index: 500;
+        }
+        .week-popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.95);
+            width: min(520px, calc(100vw - 32px));
+            max-height: 80vh;
+            overflow-y: auto;
+            background: rgba(255,255,255,0.97);
+            backdrop-filter: saturate(180%) blur(20px);
+            border-radius: 20px;
+            padding: 24px;
+            z-index: 501;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.2);
+            transition: transform 0.18s ease, opacity 0.18s ease;
+            opacity: 0;
+        }
+        .week-popup.visible {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+        }
+        .week-popup-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .week-popup-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #1d1d1f;
+        }
+        .week-popup-body {
+            font-size: 0.85rem;
+            color: #3a3a3c;
+            line-height: 1.65;
+            white-space: pre-wrap;
+        }
+
+        /* ── Легенда дашборда ── */
+        .dash-legend-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 2px solid transparent;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.15s, border-color 0.15s;
+            color: white;
+        }
+        .dash-legend-btn.hidden {
+            opacity: 0.35;
+            border-style: dashed;
+        }
+
         .task-popup-badges {
             display: flex;
             gap: 6px;
@@ -793,6 +865,7 @@
     <button class="tab-btn" data-tab="done" onclick="switchTab('done')">✅ Выполнено</button>
     <button class="tab-btn" data-tab="strategy" onclick="switchTab('strategy')">🧭 Стратегия</button>
     <button class="tab-btn" data-tab="calendar" onclick="switchTab('calendar')">📅 Календарь</button>
+    <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">📈 Дашборд</button>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
@@ -1217,6 +1290,41 @@
 </div>
 </div><!-- /tab-calendar -->
 
+<!-- ── Вкладка: Дашборд ───────────────────────────────────── -->
+<div class="tab-pane" id="tab-dashboard">
+
+<div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:16px;">
+        <div style="font-size:1rem; font-weight:600; color:#1d1d1f;">📈 Тренд по стратегическим блокам</div>
+        <div style="font-size:0.75rem; color:#6e6e73;">Снимок каждое воскресенье в 10:00 НСК</div>
+    </div>
+    <!-- Легенда-тоглы -->
+    <div id="dashLegend" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px;"></div>
+    <!-- График -->
+    <div style="position:relative; min-height:280px;">
+        <canvas id="dashChart"></canvas>
+    </div>
+    <!-- Пустое состояние -->
+    <div id="dashEmpty" style="display:none; text-align:center; padding:48px 0; color:#6e6e73;">
+        <div style="font-size:2rem; margin-bottom:12px;">📊</div>
+        <div style="font-weight:600; margin-bottom:6px;">Данных пока нет</div>
+        <div style="font-size:0.85rem; margin-bottom:20px;">Первый снимок появится в ближайшее воскресенье в 10:00</div>
+        <button class="btn-digest-weekly" onclick="sendStratDigest()" style="font-size:0.85rem;">🧭 Записать снимок сейчас</button>
+    </div>
+</div>
+
+</div><!-- /tab-dashboard -->
+
+<!-- ── Попап недели (стратегический обзор) ───────────────── -->
+<div class="week-popup-backdrop" id="weekPopupBackdrop" onclick="closeWeekPopup()"></div>
+<div class="week-popup" id="weekPopup">
+    <div class="week-popup-header">
+        <div class="week-popup-title" id="weekPopupTitle"></div>
+        <button class="task-popup-close" onclick="closeWeekPopup()">✕</button>
+    </div>
+    <div class="week-popup-body" id="weekPopupBody"></div>
+</div>
+
 <!-- ── Попап задачи ───────────────────────────────────────── -->
 <div class="task-popup-backdrop" id="taskPopupBackdrop" onclick="closeTaskPopup()"></div>
 <div class="task-popup" id="taskPopup">
@@ -1253,6 +1361,7 @@ function switchTab(tabName) {
     url.searchParams.set('tab', tabName);
     history.replaceState({}, '', url);
     if (tabName === 'calendar') initCalendar();
+    if (tabName === 'dashboard') initDashboard();
 }
 
 // Активируем нужный таб при загрузке
@@ -1619,8 +1728,177 @@ function closeTaskPopup() {
 
 // Закрытие попапа по Escape
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closeTaskPopup();
+    if (e.key === 'Escape') { closeTaskPopup(); closeWeekPopup(); }
 });
+
+// ── Дашборд: тренд стратегических блоков ──────────────────
+const AREA_COLORS = {
+    "Здоровье":    "#30d158",
+    "Семья":       "#ff375f",
+    "Работа":      "#0a84ff",
+    "Технологии":  "#5e5ce6",
+    "Люди":        "#ff9f0a",
+    "Мышление":    "#64d2ff",
+    "Творчество":  "#bf5af2",
+    "Деньги":      "#ffd60a",
+    "Публичность": "#ff6961",
+    "Система":     "#8e8e93",
+};
+
+let dashChartInstance = null;
+let dashData = null;          // кэш данных
+let dashHidden = new Set();   // скрытые области
+
+async function initDashboard() {
+    if (dashChartInstance) return; // уже инициализирован
+    try {
+        const res = await fetch('/api/strategy-chart');
+        dashData = await res.json();
+    } catch(e) {
+        console.error('Dashboard fetch error', e);
+        return;
+    }
+
+    if (!dashData.weeks || dashData.weeks.length === 0) {
+        document.getElementById('dashEmpty').style.display = 'block';
+        document.getElementById('dashChart').style.display = 'none';
+        return;
+    }
+
+    buildLegend();
+    renderDashChart();
+}
+
+function buildLegend() {
+    const container = document.getElementById('dashLegend');
+    container.innerHTML = '';
+    Object.keys(AREA_COLORS).forEach(area => {
+        const btn = document.createElement('button');
+        btn.className = 'dash-legend-btn';
+        btn.style.background = AREA_COLORS[area];
+        btn.dataset.area = area;
+        btn.innerHTML = area;
+        btn.onclick = () => toggleArea(area, btn);
+        container.appendChild(btn);
+    });
+}
+
+function toggleArea(area, btn) {
+    if (dashHidden.has(area)) {
+        dashHidden.delete(area);
+        btn.classList.remove('hidden');
+    } else {
+        dashHidden.add(area);
+        btn.classList.add('hidden');
+    }
+    // Обновляем видимость датасета
+    if (dashChartInstance) {
+        dashChartInstance.data.datasets.forEach((ds, i) => {
+            if (ds.label === area) {
+                dashChartInstance.setDatasetVisibility(i, !dashHidden.has(area));
+            }
+        });
+        dashChartInstance.update();
+    }
+}
+
+function renderDashChart() {
+    // Форматируем метки недель: "25 мая"
+    const weekLabels = dashData.weeks.map(w => {
+        const d = new Date(w);
+        return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+    });
+
+    const datasets = Object.entries(AREA_COLORS).map(([area, color]) => ({
+        label: area,
+        data: dashData.series[area] || [],
+        borderColor: color,
+        backgroundColor: color + '22',
+        borderWidth: 2.5,
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        pointBackgroundColor: color,
+        tension: 0.3,
+        spanGaps: true,
+    }));
+
+    const ctx = document.getElementById('dashChart').getContext('2d');
+    dashChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels: weekLabels, datasets },
+        options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: (items) => {
+                            // Показываем дату недели
+                            const idx = items[0].dataIndex;
+                            return 'Неделя: ' + dashData.weeks[idx];
+                        },
+                        label: (item) => {
+                            const v = item.parsed.y;
+                            return v !== null ? ` ${item.dataset.label}: ${v}/10` : null;
+                        },
+                        afterBody: (items) => {
+                            // Подсказка: кликни для обзора
+                            const idx = items[0].dataIndex;
+                            const wd = dashData.weeks[idx];
+                            return dashData.reviews[wd] ? ['', '🖱 Кликни для обзора'] : [];
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    min: 0,
+                    max: 10,
+                    ticks: { stepSize: 2, font: { size: 11 } },
+                    grid: { color: 'rgba(0,0,0,0.06)' }
+                },
+                x: {
+                    ticks: { font: { size: 11 } },
+                    grid: { display: false }
+                }
+            },
+            onClick: (evt, elements) => {
+                if (!elements.length) return;
+                const idx = elements[0].index;
+                const wd = dashData.weeks[idx];
+                const review = dashData.reviews[wd];
+                if (review) showWeekPopup(wd, review);
+            }
+        }
+    });
+}
+
+// ── Попап обзора недели ────────────────────────────────────
+function showWeekPopup(weekDate, text) {
+    const backdrop = document.getElementById('weekPopupBackdrop');
+    const popup    = document.getElementById('weekPopup');
+    const title    = document.getElementById('weekPopupTitle');
+    const body     = document.getElementById('weekPopupBody');
+
+    const d = new Date(weekDate);
+    title.textContent = '🧭 Обзор за ' + d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+    body.textContent = text;
+
+    backdrop.style.display = 'block';
+    popup.style.display    = 'block';
+    requestAnimationFrame(() => popup.classList.add('visible'));
+}
+
+function closeWeekPopup() {
+    const popup    = document.getElementById('weekPopup');
+    const backdrop = document.getElementById('weekPopupBackdrop');
+    popup.classList.remove('visible');
+    setTimeout(() => {
+        popup.style.display    = 'none';
+        backdrop.style.display = 'none';
+    }, 180);
+}
 
 // ── Service Worker ─────────────────────────────────────────
 if ("serviceWorker" in navigator) {
