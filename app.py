@@ -223,6 +223,15 @@ def init_db():
                     text TEXT NOT NULL
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS strategic_snapshots (
+                    id SERIAL PRIMARY KEY,
+                    week_date DATE UNIQUE NOT NULL,
+                    scores JSONB NOT NULL,
+                    review_text TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
             cur.execute("SELECT COUNT(*) FROM strategic_goals")
             if cur.fetchone()[0] == 0:
                 cur.executemany(
@@ -444,7 +453,11 @@ def build_strategic_digest():
 - 7-8 → нормальный темп (половина целей активна)
 - 9-10 → сильное движение (большинство целей с записями за неделю)
 
-Структура ответа:
+Структура ответа — строго в таком формате:
+
+```json
+{{"Здоровье": 0, "Семья": 0, "Работа": 0, "Технологии": 0, "Люди": 0, "Мышление": 0, "Творчество": 0, "Деньги": 0, "Публичность": 0, "Система": 0}}
+```
 
 🧭 СТРАТЕГИЧЕСКИЙ ОБЗОР — {today_str}
 
@@ -466,7 +479,35 @@ def build_strategic_digest():
             {"role": "user", "content": prompt}
         ]
     )
-    send_telegram(f"🧭 *Стратегический обзор*\n\n{response.choices[0].message.content}")
+    raw = response.choices[0].message.content
+
+    # Извлекаем JSON с оценками из блока ```json ... ```
+    import re as _re
+    import json as _json
+    scores = {}
+    json_match = _re.search(r'```json\s*(\{.*?\})\s*```', raw, _re.DOTALL)
+    if json_match:
+        try:
+            scores = _json.loads(json_match.group(1))
+        except Exception:
+            pass
+    # Нарратив — всё после блока с JSON
+    narrative = _re.sub(r'```json\s*\{.*?\}\s*```\s*', '', raw, flags=_re.DOTALL).strip()
+
+    # Сохраняем снимок в БД (upsert по week_date)
+    if scores:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO strategic_snapshots (week_date, scores, review_text)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (week_date) DO UPDATE
+                        SET scores = EXCLUDED.scores,
+                            review_text = EXCLUDED.review_text,
+                            created_at = NOW()
+                """, (today, _json.dumps(scores, ensure_ascii=False), narrative))
+
+    send_telegram(f"🧭 *Стратегический обзор*\n\n{narrative}")
 
 
 def strategic_review():
@@ -1172,6 +1213,30 @@ def ai_search():
 
     result = json.loads(response.choices[0].message.content)
     return jsonify(result)
+
+
+@app.route("/api/strategy-chart")
+def strategy_chart():
+    import json as _json
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT week_date, scores, review_text
+                FROM strategic_snapshots
+                ORDER BY week_date DESC
+                LIMIT 12
+            """)
+            rows = cur.fetchall()
+    rows = list(reversed(rows))  # хронологический порядок
+    weeks = [str(r['week_date']) for r in rows]
+    reviews = {str(r['week_date']): r['review_text'] for r in rows}
+    series = {area: [] for area in STRATEGIC_AREAS}
+    for r in rows:
+        sc = r['scores'] if isinstance(r['scores'], dict) else _json.loads(r['scores'])
+        for area in STRATEGIC_AREAS:
+            val = sc.get(area)
+            series[area].append(val if isinstance(val, (int, float)) else None)
+    return jsonify({"weeks": weeks, "series": series, "reviews": reviews})
 
 
 @app.route("/api/calendar-tasks")
