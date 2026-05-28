@@ -424,19 +424,40 @@
         .goal-card[data-area="Здоровье"]    { border-left-color: #34c759; }
         .goal-card[data-area="Семья"]       { border-left-color: #ff2d55; }
         .goal-card[data-area="Работа"]      { border-left-color: #0071e3; }
-        .goal-card[data-area="Технологии"]  { border-left-color: #5e5ce6; }
+        .goal-card[data-area="Прогрессив"]  { border-left-color: #5e5ce6; }
         .goal-card[data-area="Люди"]        { border-left-color: #00b4d8; }
         .goal-card[data-area="Мышление"]    { border-left-color: #af52de; }
-        .goal-card[data-area="Творчество"]  { border-left-color: #ff9500; }
+        .goal-card[data-area="Яркость"]     { border-left-color: #ff9500; }
         .goal-card[data-area="Деньги"]      { border-left-color: #a2845e; }
         .goal-card[data-area="Публичность"] { border-left-color: #ff3b30; }
-        .goal-card[data-area="Система"]     { border-left-color: #636366; }
+        .goal-card[data-area="Принципы"]    { border-left-color: #636366; }
         .goal-header {
             display: flex; align-items: flex-start;
             justify-content: space-between; gap: 12px;
         }
         .goal-title-wrap { flex: 1; }
         .goal-title { font-size: 0.92rem; font-weight: 500; color: #1d1d1f; }
+        /* ── Фильтр стратегии ── */
+        .strat-filter-btn {
+            padding: 5px 12px;
+            border-radius: 20px;
+            border: 1.5px solid #d1d1d6;
+            background: transparent;
+            color: #3a3a3c;
+            font-size: 0.78rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.13s, color 0.13s, border-color 0.13s;
+            white-space: nowrap;
+        }
+        .strat-filter-btn:hover { background: rgba(0,0,0,0.05); }
+        .strat-filter-btn.active {
+            background: #1d1d1f;
+            color: white;
+            border-color: #1d1d1f;
+        }
+        .goal-card.strat-hidden { display: none; }
+
         .area-badge {
             display: inline-block;
             margin-left: 8px;
@@ -449,13 +470,13 @@
         .area-Здоровье    { background: #34c759; color: white; }
         .area-Семья       { background: #ff2d55; color: white; }
         .area-Работа      { background: #0071e3; color: white; }
-        .area-Технологии  { background: #5e5ce6; color: white; }
+        .area-Прогрессив  { background: #5e5ce6; color: white; }
         .area-Люди        { background: #00b4d8; color: white; }
         .area-Мышление    { background: #af52de; color: white; }
-        .area-Творчество  { background: #ff9500; color: white; }
+        .area-Яркость     { background: #ff9500; color: white; }
         .area-Деньги      { background: #a2845e; color: white; }
         .area-Публичность { background: #ff3b30; color: white; }
-        .area-Система     { background: #636366; color: white; }
+        .area-Принципы    { background: #636366; color: white; }
 
         .goal-activity {
             display: flex; align-items: center; gap: 6px;
@@ -1162,6 +1183,17 @@
     </div>
 </div>
 
+<!-- Фильтр по направлению -->
+<div class="card" style="padding:12px 16px;">
+    <div id="stratFilter" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+        <button class="strat-filter-btn active" data-filter="all" onclick="filterStrategy('all')">Все</button>
+        {% for area in strategic_areas %}
+        <button class="strat-filter-btn" data-filter="{{ area }}" onclick="filterStrategy('{{ area }}')">{{ area }}</button>
+        {% endfor %}
+    </div>
+    <div id="stratFilterCount" style="margin-top:6px; font-size:0.72rem; color:#6e6e73; display:none;"></div>
+</div>
+
 <!-- Добавить цель -->
 <div class="card">
     <form action="/strategy/add" method="post" class="strategy-add-form">
@@ -1737,13 +1769,13 @@ const AREA_COLORS = {
     "Здоровье":    "#30d158",
     "Семья":       "#ff375f",
     "Работа":      "#0a84ff",
-    "Технологии":  "#5e5ce6",
+    "Прогрессив":  "#5e5ce6",
     "Люди":        "#ff9f0a",
     "Мышление":    "#64d2ff",
-    "Творчество":  "#bf5af2",
+    "Яркость":     "#bf5af2",
     "Деньги":      "#ffd60a",
     "Публичность": "#ff6961",
-    "Система":     "#8e8e93",
+    "Принципы":    "#8e8e93",
 };
 
 let dashChartInstance = null;
@@ -1930,6 +1962,30 @@ function closeWeekPopup() {
         popup.style.display    = 'none';
         backdrop.style.display = 'none';
     }, 180);
+}
+
+// ── Фильтр стратегических целей по направлению ────────────
+function filterStrategy(area) {
+    // Обновляем активную кнопку
+    document.querySelectorAll('.strat-filter-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.filter === area);
+    });
+    // Показываем/скрываем карточки
+    const cards = document.querySelectorAll('.goal-card');
+    let visible = 0;
+    cards.forEach(card => {
+        const match = (area === 'all') || (card.dataset.area === area);
+        card.classList.toggle('strat-hidden', !match);
+        if (match) visible++;
+    });
+    // Счётчик (только при фильтре)
+    const countEl = document.getElementById('stratFilterCount');
+    if (area === 'all') {
+        countEl.style.display = 'none';
+    } else {
+        countEl.style.display = 'block';
+        countEl.textContent = `Показано: ${visible} целей в блоке «${area}»`;
+    }
 }
 
 // ── Service Worker ─────────────────────────────────────────
