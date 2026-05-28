@@ -1228,6 +1228,43 @@ def ai_search():
     return jsonify(result)
 
 
+@app.route("/api/tactic-stats")
+def tactic_stats():
+    today = date.today()
+    week_ago  = today - timedelta(days=7)
+    month_ago = today - timedelta(days=30)
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT status, COUNT(*) AS cnt FROM tasks GROUP BY status")
+            by_status = {r["status"]: r["cnt"] for r in cur.fetchall()}
+            cur.execute("SELECT priority, COUNT(*) AS cnt FROM tasks WHERE status != 'Завершена' GROUP BY priority")
+            by_priority = {r["priority"]: r["cnt"] for r in cur.fetchall()}
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status='Завершена' AND closed_at >= %s", (week_ago,))
+            closed_7 = cur.fetchone()["cnt"]
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status='Завершена' AND closed_at >= %s", (month_ago,))
+            closed_30 = cur.fetchone()["cnt"]
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE deadline < %s AND status != 'Завершена'", (today,))
+            overdue = cur.fetchone()["cnt"]
+            cur.execute("""
+                SELECT project, COUNT(*) AS cnt FROM tasks
+                WHERE status != 'Завершена' AND project IS NOT NULL AND project != ''
+                GROUP BY project ORDER BY cnt DESC LIMIT 8
+            """)
+            by_project = [dict(r) for r in cur.fetchall()]
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status != 'Завершена'")
+            open_total = cur.fetchone()["cnt"]
+            cur.execute("SELECT ROUND(AVG(CURRENT_DATE - created_at)) AS avg_age FROM tasks WHERE status != 'Завершена'")
+            avg_age = int(cur.fetchone()["avg_age"] or 0)
+            closed_all = by_status.get("Завершена", 0)
+    return jsonify({
+        "open_total": open_total, "closed_all": closed_all,
+        "closed_7": closed_7, "closed_30": closed_30,
+        "overdue": overdue, "avg_age": avg_age,
+        "by_status": by_status, "by_priority": by_priority,
+        "by_project": by_project,
+    })
+
+
 @app.route("/api/strategy-chart")
 def strategy_chart():
     import json as _json
