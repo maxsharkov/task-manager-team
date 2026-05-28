@@ -371,6 +371,58 @@
         .tab-pane { display: none; }
         .tab-pane.active { display: block; }
 
+        /* ── Группы таб-бара ── */
+        .tab-group {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .tab-group-label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: #aeaeb2;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            padding: 0 6px 0 2px;
+            white-space: nowrap;
+        }
+        .tab-group-divider {
+            width: 1px;
+            height: 22px;
+            background: rgba(0,0,0,0.12);
+            margin: 0 6px;
+            flex-shrink: 0;
+        }
+
+        /* ── Тактика-дашборд ── */
+        .td-stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .td-stat-card {
+            background: rgba(0,0,0,0.025);
+            border-radius: 14px;
+            padding: 16px 18px;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        .td-stat-label { font-size: 0.68rem; font-weight: 700; color: #6e6e73; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+        .td-stat-value { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.03em; color: #1d1d1f; }
+        .td-stat-value.red    { color: #ff3b30; }
+        .td-stat-value.green  { color: #34c759; }
+        .td-stat-value.blue   { color: #0071e3; }
+        .td-stat-value.purple { color: #5e5ce6; }
+        .td-stat-sub { font-size: 0.72rem; color: #6e6e73; margin-top: 3px; }
+        .td-dist-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .td-dist-row:last-child { margin-bottom: 0; }
+        .td-dist-name { font-size: 0.82rem; min-width: 100px; }
+        .td-dist-bar-wrap { flex: 1; height: 5px; background: rgba(0,0,0,0.07); border-radius: 3px; overflow: hidden; }
+        .td-dist-bar { height: 100%; border-radius: 3px; }
+        .td-dist-count { font-size: 0.8rem; color: #6e6e73; min-width: 24px; text-align: right; font-weight: 600; }
+        .td-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+        @media (max-width: 640px) { .td-two-col { grid-template-columns: 1fr; } }
+
         /* ── Done tasks ──────────────────────────────────────── */
         .done-week-header {
             font-size: 0.72rem;
@@ -799,14 +851,14 @@
             table tbody tr[data-priority="Средний"]  { border-left: 4px solid #ff9500 !important; }
             table tbody tr[data-priority="Низкий"]   { border-left: 4px solid #34c759 !important; }
 
-            /* Таб-бар: 2×2 сетка на мобиле */
+            /* Таб-бар: скролл + группы на мобиле */
             .tab-bar {
-                flex-wrap: wrap;
-                overflow-x: visible;
+                overflow-x: auto;
+                flex-wrap: nowrap;
             }
+            .tab-group { flex-shrink: 0; }
             .tab-btn {
-                flex: 1 1 calc(50% - 4px);
-                padding: 8px 6px;
+                padding: 8px 10px;
                 font-size: 0.78rem;
                 text-align: center;
             }
@@ -875,18 +927,27 @@
 
 <header class="site-header">
     <h1>Таск-менеджер</h1>
-    <a href="/dashboard" style="margin-left:auto; font-size:0.85rem; color:#0071e3; text-decoration:none; font-weight:500;">📊 Дашборд</a>
 </header>
 
 <div class="container">
 
 <!-- Таб-бар -->
 <div class="tab-bar">
-    <button class="tab-btn" data-tab="tasks" onclick="switchTab('tasks')">📋 Задачи</button>
-    <button class="tab-btn" data-tab="done" onclick="switchTab('done')">✅ Выполнено</button>
-    <button class="tab-btn" data-tab="strategy" onclick="switchTab('strategy')">🧭 Стратегия</button>
-    <button class="tab-btn" data-tab="calendar" onclick="switchTab('calendar')">📅 Календарь</button>
-    <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">📈 Дашборд</button>
+    <!-- Группа: Тактика -->
+    <div class="tab-group">
+        <span class="tab-group-label">Тактика</span>
+        <button class="tab-btn" data-tab="tasks" onclick="switchTab('tasks')">Задачи</button>
+        <button class="tab-btn" data-tab="done" onclick="switchTab('done')">Выполнено</button>
+        <button class="tab-btn" data-tab="calendar" onclick="switchTab('calendar')">Календарь</button>
+        <button class="tab-btn" data-tab="tactic-dash" onclick="switchTab('tactic-dash')">Дашборд</button>
+    </div>
+    <div class="tab-group-divider"></div>
+    <!-- Группа: Стратегия -->
+    <div class="tab-group">
+        <span class="tab-group-label">Стратегия</span>
+        <button class="tab-btn" data-tab="strategy" onclick="switchTab('strategy')">Задачи</button>
+        <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">Дашборд</button>
+    </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ -->
@@ -1301,6 +1362,32 @@
 </div><!-- /tab-strategy -->
 
 <!-- ═══════════════════════════════════════════════════════ -->
+<!-- ВКЛ. ТАКТИКА-ДАШБОРД                                 -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-pane" id="tab-tactic-dash">
+<div class="card">
+    <div style="font-size:0.72rem; font-weight:700; color:#6e6e73; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:14px;">Общая картина</div>
+    <div class="td-stat-grid" id="tdStatGrid">
+        <div class="td-stat-card"><div class="td-stat-label">Загрузка…</div><div class="td-stat-value">—</div></div>
+    </div>
+    <div class="td-two-col">
+        <div>
+            <div style="font-size:0.72rem; font-weight:700; color:#6e6e73; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:12px;">По статусу</div>
+            <div id="tdByStatus"></div>
+        </div>
+        <div>
+            <div style="font-size:0.72rem; font-weight:700; color:#6e6e73; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:12px;">По приоритету (открытые)</div>
+            <div id="tdByPriority"></div>
+        </div>
+    </div>
+    <div id="tdByProjectWrap" style="display:none;">
+        <div style="font-size:0.72rem; font-weight:700; color:#6e6e73; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:12px;">Топ проектов</div>
+        <div id="tdByProject"></div>
+    </div>
+</div>
+</div><!-- /tab-tactic-dash -->
+
+<!-- ═══════════════════════════════════════════════════════ -->
 <!-- ВКЛ. КАЛЕНДАРЬ                                        -->
 <!-- ═══════════════════════════════════════════════════════ -->
 <div class="tab-pane" id="tab-calendar">
@@ -1397,6 +1484,7 @@ function switchTab(tabName) {
     history.replaceState({}, '', url);
     if (tabName === 'calendar') initCalendar();
     if (tabName === 'dashboard') initDashboard();
+    if (tabName === 'tactic-dash') initTacticDash();
 }
 
 // Активируем нужный таб при загрузке
@@ -1964,6 +2052,76 @@ function closeWeekPopup() {
         popup.style.display    = 'none';
         backdrop.style.display = 'none';
     }, 180);
+}
+
+// ── Тактика-дашборд ────────────────────────────────────────
+let tacticDashLoaded = false;
+
+async function initTacticDash() {
+    if (tacticDashLoaded) return;
+    try {
+        const res = await fetch('/api/tactic-stats');
+        const d = await res.json();
+        renderTacticDash(d);
+        tacticDashLoaded = true;
+    } catch(e) { console.error('tactic-dash error', e); }
+}
+
+function renderTacticDash(d) {
+    // Stat cards
+    const statDefs = [
+        { label: 'Открытых задач',    value: d.open_total, cls: 'blue',   sub: 'всего активных' },
+        { label: 'Завершено всего',   value: d.closed_all, cls: 'green',  sub: 'всего закрыто' },
+        { label: 'Закрыто за 7 дней', value: d.closed_7,   cls: d.closed_7 > 0 ? 'green' : '', sub: 'за неделю' },
+        { label: 'Закрыто за 30 дней',value: d.closed_30,  cls: 'purple', sub: 'за месяц' },
+        { label: 'Просрочено',        value: d.overdue,    cls: d.overdue > 0 ? 'red' : '', sub: 'дедлайн прошёл' },
+        { label: 'Средний возраст',   value: d.avg_age,    cls: d.avg_age > 14 ? 'red' : d.avg_age > 7 ? 'purple' : '', sub: 'дней в работе' },
+    ];
+    document.getElementById('tdStatGrid').innerHTML = statDefs.map(s =>
+        `<div class="td-stat-card">
+            <div class="td-stat-label">${s.label}</div>
+            <div class="td-stat-value ${s.cls}">${s.value}</div>
+            <div class="td-stat-sub">${s.sub}</div>
+        </div>`
+    ).join('');
+
+    // По статусу
+    const totalAll = (d.by_status['Новая']||0) + (d.by_status['В работе']||0) + (d.by_status['Завершена']||0) || 1;
+    const statusRows = [['Новая','#0071e3'],['В работе','#ff9500'],['Завершена','#34c759']].map(([s,c]) => {
+        const cnt = d.by_status[s] || 0;
+        return `<div class="td-dist-row">
+            <span class="td-dist-name">${s}</span>
+            <div class="td-dist-bar-wrap"><div class="td-dist-bar" style="width:${Math.round(cnt/totalAll*100)}%;background:${c};"></div></div>
+            <span class="td-dist-count">${cnt}</span>
+        </div>`;
+    }).join('');
+    document.getElementById('tdByStatus').innerHTML = statusRows;
+
+    // По приоритету
+    const totalP = (d.by_priority['Высокий']||0) + (d.by_priority['Средний']||0) + (d.by_priority['Низкий']||0) || 1;
+    const prioRows = [['Высокий','#ff3b30'],['Средний','#ff9500'],['Низкий','#34c759']].map(([p,c]) => {
+        const cnt = d.by_priority[p] || 0;
+        return `<div class="td-dist-row">
+            <span class="td-dist-name">${p}</span>
+            <div class="td-dist-bar-wrap"><div class="td-dist-bar" style="width:${Math.round(cnt/totalP*100)}%;background:${c};"></div></div>
+            <span class="td-dist-count">${cnt}</span>
+        </div>`;
+    }).join('');
+    document.getElementById('tdByPriority').innerHTML = prioRows;
+
+    // Топ проектов
+    if (d.by_project && d.by_project.length > 0) {
+        const maxP = d.by_project[0].cnt;
+        const projRows = d.by_project.map(r =>
+            `<div class="td-dist-row">
+                <span class="td-dist-name" style="min-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.project}</span>
+                <div class="td-dist-bar-wrap"><div class="td-dist-bar" style="width:${Math.round(r.cnt/maxP*100)}%;background:#0071e3;"></div></div>
+                <span class="td-dist-count">${r.cnt}</span>
+            </div>`
+        ).join('');
+        document.getElementById('tdByProject').innerHTML = projRows;
+        document.getElementById('tdByProjectWrap').style.display = 'block';
+    }
 }
 
 // ── Фильтр стратегических целей по направлению ────────────
