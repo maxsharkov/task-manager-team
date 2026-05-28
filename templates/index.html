@@ -1326,10 +1326,14 @@
 <div class="tab-pane" id="tab-dashboard">
 
 <div class="card">
-    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:16px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
         <div style="font-size:1rem; font-weight:600; color:#1d1d1f;">📈 Тренд по стратегическим блокам</div>
-        <div style="font-size:0.75rem; color:#6e6e73;">Снимок каждое воскресенье в 10:00 НСК</div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <button class="btn-digest-weekly" id="dashRecordBtn" onclick="recordAndRefreshDashboard()" style="font-size:0.82rem; padding:6px 14px;">📸 Записать снимок сейчас</button>
+            <div style="font-size:0.72rem; color:#6e6e73;">Авто: вс 10:00 НСК</div>
+        </div>
     </div>
+    <div id="dashRecordStatus" style="font-size:0.82rem; color:#6e6e73; margin-bottom:8px; min-height:18px;"></div>
     <!-- Легенда-тоглы -->
     <div id="dashLegend" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px;"></div>
     <!-- График -->
@@ -1337,12 +1341,10 @@
         <canvas id="dashChart"></canvas>
     </div>
     <!-- Пустое состояние -->
-    <div id="dashEmpty" style="display:none; text-align:center; padding:48px 0; color:#6e6e73;">
+    <div id="dashEmpty" style="display:none; text-align:center; padding:32px 0; color:#6e6e73;">
         <div style="font-size:2rem; margin-bottom:12px;">📊</div>
         <div style="font-weight:600; margin-bottom:6px;">Данных пока нет</div>
-        <div style="font-size:0.85rem; margin-bottom:20px;">Первый снимок появится в ближайшее воскресенье в 10:00</div>
-        <button class="btn-digest-weekly" id="dashRecordBtn" onclick="recordAndRefreshDashboard()" style="font-size:0.85rem;">🧭 Записать снимок сейчас</button>
-        <div id="dashRecordStatus" style="margin-top:10px; font-size:0.82rem; color:#6e6e73;"></div>
+        <div style="font-size:0.85rem;">Нажмите «Записать снимок сейчас» или дождитесь воскресенья в 10:00</div>
     </div>
 </div>
 
