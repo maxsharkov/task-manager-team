@@ -1309,7 +1309,8 @@
         <div style="font-size:2rem; margin-bottom:12px;">📊</div>
         <div style="font-weight:600; margin-bottom:6px;">Данных пока нет</div>
         <div style="font-size:0.85rem; margin-bottom:20px;">Первый снимок появится в ближайшее воскресенье в 10:00</div>
-        <button class="btn-digest-weekly" onclick="sendStratDigest()" style="font-size:0.85rem;">🧭 Записать снимок сейчас</button>
+        <button class="btn-digest-weekly" id="dashRecordBtn" onclick="recordAndRefreshDashboard()" style="font-size:0.85rem;">🧭 Записать снимок сейчас</button>
+        <div id="dashRecordStatus" style="margin-top:10px; font-size:0.82rem; color:#6e6e73;"></div>
     </div>
 </div>
 
@@ -1748,9 +1749,32 @@ const AREA_COLORS = {
 let dashChartInstance = null;
 let dashData = null;          // кэш данных
 let dashHidden = new Set();   // скрытые области
+let dashLoaded = false;       // уже загружено (не пустое)
 
-async function initDashboard() {
-    if (dashChartInstance) return; // уже инициализирован
+async function recordAndRefreshDashboard() {
+    const btn = document.getElementById('dashRecordBtn');
+    const statusEl = document.getElementById('dashRecordStatus');
+    btn.disabled = true;
+    statusEl.textContent = 'Запрашиваю GPT и записываю снимок…';
+    try {
+        const res = await fetch('/strategy/digest', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+            statusEl.textContent = '✓ Снимок записан — обновляю дашборд…';
+            await initDashboard(true);  // force-перезагрузка
+            statusEl.textContent = '';
+        } else {
+            statusEl.textContent = 'Ошибка: ' + (data.error || 'неизвестно');
+        }
+    } catch(e) {
+        statusEl.textContent = 'Ошибка соединения';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function initDashboard(force = false) {
+    if (dashLoaded && !force) return; // уже показан график — не перерисовываем
     try {
         const res = await fetch('/api/strategy-chart');
         dashData = await res.json();
@@ -1765,8 +1789,16 @@ async function initDashboard() {
         return;
     }
 
+    // Скрываем пустое состояние, показываем график
+    document.getElementById('dashEmpty').style.display = 'none';
+    document.getElementById('dashChart').style.display = 'block';
+
+    // Уничтожаем старый инстанс если был
+    if (dashChartInstance) { dashChartInstance.destroy(); dashChartInstance = null; }
+
     buildLegend();
     renderDashChart();
+    dashLoaded = true;
 }
 
 function buildLegend() {
