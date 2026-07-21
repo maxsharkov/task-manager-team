@@ -312,7 +312,7 @@ def send_email(to_addr, subject, body):
         timeout=15,
     )
     if res.status_code >= 400:
-        print(f"Resend error {res.status_code}: {res.text}")
+        raise RuntimeError(f"Resend error {res.status_code}: {res.text}")
 
 
 def build_digest(digest_type, user_id, to_email):
@@ -428,12 +428,18 @@ def build_digest(digest_type, user_id, to_email):
 
 def daily_digest():
     for user in all_users():
-        build_digest("daily", user["id"], user["email"])
+        try:
+            build_digest("daily", user["id"], user["email"])
+        except Exception as e:
+            print(f"daily_digest failed for {user['email']}: {e}")
 
 
 def weekly_digest():
     for user in all_users():
-        build_digest("weekly", user["id"], user["email"])
+        try:
+            build_digest("weekly", user["id"], user["email"])
+        except Exception as e:
+            print(f"weekly_digest failed for {user['email']}: {e}")
 
 
 def build_strategic_digest(user_id, to_email):
@@ -584,7 +590,10 @@ def build_strategic_digest(user_id, to_email):
 
 def strategic_review():
     for user in all_users():
-        build_strategic_digest(user["id"], user["email"])
+        try:
+            build_strategic_digest(user["id"], user["email"])
+        except Exception as e:
+            print(f"strategic_review failed for {user['email']}: {e}")
 
 
 # ── Планировщик ────────────────────────────────────────────
