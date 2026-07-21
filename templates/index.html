@@ -1233,7 +1233,7 @@
     <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
         <button class="btn-digest-weekly" id="stratDigestBtn" onclick="sendStratDigest()">🧭 Обзор в Telegram</button>
         <button class="btn-analyze" id="stratAnalyzeBtn" onclick="analyzeStrategy()">🤖 Анализ целей</button>
-        <button class="btn-cleanup" id="stratResetBtn" onclick="resetStrategy()" style="font-size:0.82rem;">↺ Перезагрузить список</button>
+        <a class="btn-cleanup" href="/strategy/export" style="font-size:0.82rem; text-decoration:none; display:inline-flex; align-items:center;">📊 Выгрузить в Excel</a>
         <span id="stratDigestStatus" style="color:#6e6e73; font-size:0.82rem;"></span>
     </div>
     <div style="margin-top:8px; font-size:0.72rem; color:#6e6e73;">
@@ -1596,25 +1596,6 @@ async function sendStratDigest() {
         btn.disabled = false;
         setTimeout(() => { statusEl.textContent = ""; }, 3500);
     }
-}
-
-// ── Перезагрузка стратегических целей ─────────────────────
-async function resetStrategy() {
-    if (!confirm('Удалить все текущие цели (включая записи) и загрузить новый список? Это действие необратимо.')) return;
-    const btn = document.getElementById('stratResetBtn');
-    const statusEl = document.getElementById('stratDigestStatus');
-    btn.disabled = true; statusEl.textContent = 'Перезагружаю...';
-    try {
-        const res  = await fetch('/strategy/reset', { method: 'POST' });
-        const data = await res.json();
-        if (data.ok) {
-            statusEl.textContent = `✓ Загружено ${data.count} целей — обновляю страницу...`;
-            setTimeout(() => location.reload(), 1200);
-        } else {
-            statusEl.textContent = 'Ошибка: ' + (data.error || 'unknown');
-        }
-    } catch(e) { statusEl.textContent = 'Ошибка'; }
-    finally { btn.disabled = false; }
 }
 
 // ── Анализ стратегических целей на странице ────────────────

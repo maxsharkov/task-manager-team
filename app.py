@@ -1,7 +1,8 @@
 import os
 import json
+import io
 import requests
-from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory, send_file
 import psycopg2
 import psycopg2.extras
 from datetime import date, timedelta
@@ -11,6 +12,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import pytz
 import gcal
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.utils import get_column_letter
 
 app = Flask(__name__)
 DATABASE_URL = (
@@ -686,19 +690,6 @@ def strategy_delete(goal_id):
     return redirect("/?tab=strategy")
 
 
-@app.route("/strategy/reset", methods=["POST"])
-def strategy_reset():
-    """Сбрасывает все стратегические цели и заливает актуальный STRATEGIC_SEED."""
-    with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM strategic_goals")
-            cur.executemany(
-                "INSERT INTO strategic_goals (title, area) VALUES (%s, %s)",
-                STRATEGIC_SEED
-            )
-    return jsonify({"ok": True, "count": len(STRATEGIC_SEED)})
-
-
 @app.route("/gcal-resync", methods=["POST"])
 def gcal_resync():
     """Пересоздаёт Calendar-события для активных повторяющихся задач с RRULE.
@@ -818,6 +809,95 @@ def strategy_analyze():
     )
 
     return jsonify({"summary": response.choices[0].message.content})
+
+
+def _goal_activity_status(last_log_date, today):
+    if not last_log_date:
+        return "Нет записей"
+    days_ago = (today - last_log_date).days
+    if days_ago <= 7:
+        return "Активна"
+    if days_ago <= 14:
+        return "Замедление"
+    return "Стагнация"
+
+
+@app.route("/strategy/export")
+def strategy_export():
+    today = date.today()
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT g.*, MAX(l.logged_at) AS last_log_date, COUNT(l.id) AS log_count
+                FROM strategic_goals g
+                LEFT JOIN strategic_logs l ON l.goal_id = g.id
+                GROUP BY g.id
+                ORDER BY g.area, g.title
+            """)
+            goals = cur.fetchall()
+
+            cur.execute("""
+                SELECT l.goal_id, l.logged_at, l.text, g.area, g.title
+                FROM strategic_logs l
+                JOIN strategic_goals g ON g.id = l.goal_id
+                ORDER BY g.area, g.title, l.logged_at DESC, l.id DESC
+            """)
+            logs = cur.fetchall()
+
+    wb = Workbook()
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="1D1D1F", end_color="1D1D1F", fill_type="solid")
+    wrap = Alignment(wrap_text=True, vertical="top")
+
+    def style_header(ws, ncols):
+        for col in range(1, ncols + 1):
+            cell = ws.cell(row=1, column=col)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(vertical="center")
+        ws.freeze_panes = "A2"
+
+    ws1 = wb.active
+    ws1.title = "Цели"
+    ws1.append(["Область", "Цель", "Статус", "Дней с последней записи", "Последняя запись", "Всего записей", "Создана"])
+    for g in goals:
+        days_ago = (today - g["last_log_date"]).days if g["last_log_date"] else None
+        ws1.append([
+            g["area"],
+            g["title"],
+            _goal_activity_status(g["last_log_date"], today),
+            days_ago if days_ago is not None else "",
+            g["last_log_date"].isoformat() if g["last_log_date"] else "",
+            g["log_count"],
+            g["created_at"].isoformat() if g["created_at"] else "",
+        ])
+    widths1 = [14, 55, 14, 20, 16, 14, 12]
+    for i, w in enumerate(widths1, start=1):
+        ws1.column_dimensions[get_column_letter(i)].width = w
+    style_header(ws1, len(widths1))
+
+    ws2 = wb.create_sheet("История записей")
+    ws2.append(["Область", "Цель", "Дата", "Комментарий"])
+    for l in logs:
+        ws2.append([l["area"], l["title"], l["logged_at"].isoformat(), l["text"]])
+    for row in ws2.iter_rows(min_row=2):
+        row[3].alignment = wrap
+    widths2 = [14, 45, 12, 90]
+    for i, w in enumerate(widths2, start=1):
+        ws2.column_dimensions[get_column_letter(i)].width = w
+    style_header(ws2, len(widths2))
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"strategy_export_{today.isoformat()}.xlsx"
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @app.route("/add", methods=["POST"])
