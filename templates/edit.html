@@ -32,6 +32,11 @@
         }
         .site-header h1 { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
         .header-id { font-size: 0.82rem; color: #6e6e73; font-weight: 400; }
+        .site-header form { margin-left: auto; }
+        .site-header a, .site-header button.link-btn {
+            font-size: 0.85rem; color: #0071e3; text-decoration: none; font-weight: 500;
+            background: none; border: none; cursor: pointer; padding: 0; font-family: inherit;
+        }
 
         .container { max-width: 680px; margin: 0 auto; padding: 32px 24px; }
 
@@ -165,6 +170,7 @@
 <header class="site-header">
     <h1>Редактировать задачу</h1>
     <span class="header-id">#{{ task.id }}</span>
+    <form method="POST" action="/logout"><button type="submit" class="link-btn">Выйти</button></form>
 </header>
 
 <div class="container">
