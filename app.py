@@ -1543,7 +1543,6 @@ def health():
     result["DATABASE_URL_set"] = bool(os.environ.get("DATABASE_URL"))
     result["OPENAI_API_KEY_set"] = bool(os.environ.get("OPENAI_API_KEY"))
     result["TELEGRAM_configured"] = bool(TELEGRAM_TOKEN and TELEGRAM_CHAT_ID)
-    result["DATABASE_URL_prefix"] = (os.environ.get("DATABASE_URL") or "")[:30]
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
