@@ -523,6 +523,8 @@
             font-size: 0.68rem;
             font-weight: 700;
             letter-spacing: 0.02em;
+            background: rgba(0,0,0,0.08);
+            color: #3a3a3c;
         }
         .area-Здоровье    { background: #34c759; color: white; }
         .area-Семья       { background: #ff2d55; color: white; }
@@ -1248,12 +1250,34 @@
     </div>
 </div>
 
+<!-- Категории -->
+<div class="card" style="padding:12px 16px;">
+    <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+        {% for area in strategic_areas %}
+        <span class="area-badge area-{{ area.name }}" style="display:inline-flex; align-items:center; gap:6px;">
+            {{ area.name }}
+            <form action="/strategy/area/delete/{{ area.id }}" method="post" style="display:inline;"
+                  onsubmit="return confirm('Удалить категорию «{{ area.name }}»? Уже созданные в ней цели останутся.')">
+                <button type="submit" style="background:none; border:none; color:inherit; cursor:pointer; padding:0; font-size:0.9em;">✕</button>
+            </form>
+        </span>
+        {% endfor %}
+    </div>
+    <form action="/strategy/area/add" method="post" style="display:flex; gap:8px; margin-top:10px; align-items:flex-end;">
+        <div class="field" style="flex:1; max-width:260px;">
+            <label>Новая категория</label>
+            <input type="text" name="name" placeholder="Например, Обучение" required>
+        </div>
+        <button type="submit" class="btn-edit">+ Добавить категорию</button>
+    </form>
+</div>
+
 <!-- Фильтр по направлению -->
 <div class="card" style="padding:12px 16px;">
     <div id="stratFilter" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
         <button class="strat-filter-btn active" data-filter="all" onclick="filterStrategy('all')">Все</button>
         {% for area in strategic_areas %}
-        <button class="strat-filter-btn" data-filter="{{ area }}" onclick="filterStrategy('{{ area }}')">{{ area }}</button>
+        <button class="strat-filter-btn" data-filter="{{ area.name }}" onclick="filterStrategy('{{ area.name }}')">{{ area.name }}</button>
         {% endfor %}
     </div>
     <div id="stratFilterCount" style="margin-top:6px; font-size:0.72rem; color:#6e6e73; display:none;"></div>
@@ -1270,7 +1294,7 @@
             <label>Направление</label>
             <select name="area">
                 {% for a in strategic_areas %}
-                <option value="{{ a }}">{{ a }}</option>
+                <option value="{{ a.name }}">{{ a.name }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -1345,7 +1369,7 @@
                             <label>Направление</label>
                             <select name="area">
                                 {% for a in strategic_areas %}
-                                <option value="{{ a }}" {% if a == g.area %}selected{% endif %}>{{ a }}</option>
+                                <option value="{{ a.name }}" {% if a.name == g.area %}selected{% endif %}>{{ a.name }}</option>
                                 {% endfor %}
                             </select>
                         </div>
