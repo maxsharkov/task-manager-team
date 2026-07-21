@@ -1,8 +1,7 @@
 import os
 import json
 import io
-import smtplib
-from email.mime.text import MIMEText
+import requests
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory, send_file, session
 import psycopg2
 import psycopg2.extras
@@ -29,11 +28,8 @@ app.secret_key = os.environ["SECRET_KEY"]
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=True)
 
 INVITE_CODE = os.environ.get("INVITE_CODE")
-SMTP_HOST = os.environ.get("SMTP_HOST")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER = os.environ.get("SMTP_USER")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
-SMTP_FROM = os.environ.get("SMTP_FROM") or SMTP_USER
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
+RESEND_FROM = os.environ.get("RESEND_FROM", "onboarding@resend.dev")
 NSK = pytz.timezone("Asia/Novosibirsk")
 
 STATUSES = ["Новая", "В работе", "Завершена"]
@@ -301,17 +297,22 @@ def all_users():
 
 
 def send_email(to_addr, subject, body):
-    if not SMTP_HOST or not to_addr:
+    if not RESEND_API_KEY or not to_addr:
         print(f"Email not configured, skipping send to {to_addr}")
         return
-    msg = MIMEText(body, "plain", "utf-8")
-    msg["Subject"] = subject
-    msg["From"] = SMTP_FROM
-    msg["To"] = to_addr
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.starttls()
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.sendmail(SMTP_FROM, [to_addr], msg.as_string())
+    res = requests.post(
+        "https://api.resend.com/emails",
+        headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+        json={
+            "from": RESEND_FROM,
+            "to": [to_addr],
+            "subject": subject,
+            "text": body,
+        },
+        timeout=15,
+    )
+    if res.status_code >= 400:
+        print(f"Resend error {res.status_code}: {res.text}")
 
 
 def build_digest(digest_type, user_id, to_email):
@@ -1458,7 +1459,7 @@ def health():
     result = {}
     result["DATABASE_URL_set"] = bool(os.environ.get("DATABASE_URL"))
     result["OPENAI_API_KEY_set"] = bool(os.environ.get("OPENAI_API_KEY"))
-    result["SMTP_configured"] = bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
+    result["RESEND_configured"] = bool(RESEND_API_KEY)
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
