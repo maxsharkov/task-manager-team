@@ -31,7 +31,11 @@
             z-index: 100;
         }
         .site-header h1 { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
-        .site-header a { margin-left: auto; font-size: 0.85rem; color: #0071e3; text-decoration: none; font-weight: 500; }
+        .header-actions { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+        .site-header a, .site-header button.link-btn {
+            font-size: 0.85rem; color: #0071e3; text-decoration: none; font-weight: 500;
+            background: none; border: none; cursor: pointer; padding: 0; font-family: inherit;
+        }
 
         .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
 
@@ -97,7 +101,10 @@
 
 <header class="site-header">
     <h1>Дашборд</h1>
-    <a href="/">← Задачи</a>
+    <div class="header-actions">
+        <a href="/">← Задачи</a>
+        <form method="POST" action="/logout"><button type="submit" class="link-btn">Выйти</button></form>
+    </div>
 </header>
 
 <div class="container">

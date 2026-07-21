@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Регистрация — Таск-менеджер</title>
+    <link rel="stylesheet" href="/static/auth.css">
+</head>
+<body>
+    <div class="auth-card">
+        <h1>Регистрация</h1>
+        {% if error %}<div class="error-banner">{{ error }}</div>{% endif %}
+        <form method="POST">
+            <div class="field">
+                <label>Email</label>
+                <input type="email" name="email" required autofocus>
+            </div>
+            <div class="field">
+                <label>Пароль</label>
+                <input type="password" name="password" required minlength="6">
+            </div>
+            {% if invite_required %}
+            <div class="field">
+                <label>Инвайт-код</label>
+                <input type="text" name="invite_code" required>
+            </div>
+            {% endif %}
+            <button type="submit" class="btn-primary">Зарегистрироваться</button>
+        </form>
+        <div class="auth-footer">Уже есть аккаунт? <a href="/login">Войти</a></div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход — Таск-менеджер</title>
+    <link rel="stylesheet" href="/static/auth.css">
+</head>
+<body>
+    <div class="auth-card">
+        <h1>Вход</h1>
+        {% if error %}<div class="error-banner">{{ error }}</div>{% endif %}
+        <form method="POST">
+            <input type="hidden" name="next" value="{{ next }}">
+            <div class="field">
+                <label>Email</label>
+                <input type="email" name="email" required autofocus>
+            </div>
+            <div class="field">
+                <label>Пароль</label>
+                <input type="password" name="password" required>
+            </div>
+            <button type="submit" class="btn-primary">Войти</button>
+        </form>
+        <div class="auth-footer">Нет аккаунта? <a href="/register">Зарегистрироваться</a></div>
+    </div>
+</body>
+</html>

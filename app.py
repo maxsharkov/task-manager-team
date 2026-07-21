@@ -1,8 +1,9 @@
 import os
 import json
 import io
-import requests
-from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory, send_file
+import smtplib
+from email.mime.text import MIMEText
+from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory, send_file, session
 import psycopg2
 import psycopg2.extras
 from datetime import date, timedelta
@@ -11,7 +12,7 @@ from openai import OpenAI
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import pytz
-import gcal
+from werkzeug.security import generate_password_hash, check_password_hash
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
@@ -24,9 +25,15 @@ DATABASE_URL = (
 ).replace("postgres://", "postgresql://", 1)
 openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+app.secret_key = os.environ["SECRET_KEY"]
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=True)
+
+INVITE_CODE = os.environ.get("INVITE_CODE")
+SMTP_HOST = os.environ.get("SMTP_HOST")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
+SMTP_FROM = os.environ.get("SMTP_FROM") or SMTP_USER
 NSK = pytz.timezone("Asia/Novosibirsk")
 
 STATUSES = ["Новая", "В работе", "Завершена"]
@@ -181,6 +188,14 @@ def init_db():
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            cur.execute("""
                 CREATE TABLE IF NOT EXISTS tasks (
                     id SERIAL PRIMARY KEY,
                     title TEXT NOT NULL,
@@ -203,6 +218,7 @@ def init_db():
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence TEXT")
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS closed_at DATE")
             cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS category TEXT")
+            cur.execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE")
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS subtasks (
                     id SERIAL PRIMARY KEY,
@@ -219,6 +235,7 @@ def init_db():
                     created_at DATE DEFAULT CURRENT_DATE
                 )
             """)
+            cur.execute("ALTER TABLE strategic_goals ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE")
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS strategic_logs (
                     id SERIAL PRIMARY KEY,
@@ -230,11 +247,23 @@ def init_db():
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS strategic_snapshots (
                     id SERIAL PRIMARY KEY,
-                    week_date DATE UNIQUE NOT NULL,
+                    week_date DATE NOT NULL,
                     scores JSONB NOT NULL,
                     review_text TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT NOW()
                 )
+            """)
+            cur.execute("ALTER TABLE strategic_snapshots ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE")
+            cur.execute("ALTER TABLE strategic_snapshots DROP CONSTRAINT IF EXISTS strategic_snapshots_week_date_key")
+            cur.execute("""
+                DO $$ BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint WHERE conname = 'strategic_snapshots_week_date_user_id_key'
+                    ) THEN
+                        ALTER TABLE strategic_snapshots
+                            ADD CONSTRAINT strategic_snapshots_week_date_user_id_key UNIQUE (week_date, user_id);
+                    END IF;
+                END $$;
             """)
             # Миграция переименований областей
             _RENAMES = [("Технологии", "Прогрессив"), ("Творчество", "Яркость"), ("Система", "Принципы")]
@@ -246,38 +275,61 @@ def init_db():
                     SET scores = (scores - %s) || jsonb_build_object(%s, scores->%s)
                     WHERE scores ? %s
                 """, (old, new, old, old))
-            cur.execute("SELECT COUNT(*) FROM strategic_goals")
+            # Одноразовая очистка сиротских (без владельца) целей, засеянных до multi-user —
+            # безопасно только пока по ним нет реальных записей
+            cur.execute("SELECT COUNT(*) FROM strategic_logs")
             if cur.fetchone()[0] == 0:
-                cur.executemany(
-                    "INSERT INTO strategic_goals (title, area) VALUES (%s, %s)",
-                    STRATEGIC_SEED
-                )
+                cur.execute("DELETE FROM strategic_goals WHERE user_id IS NULL")
 
 
-def send_telegram(text):
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("Telegram not configured")
+def seed_strategic_goals_for_user(cur, user_id):
+    cur.executemany(
+        "INSERT INTO strategic_goals (title, area, user_id) VALUES (%s, %s, %s)",
+        [(title, area, user_id) for title, area in STRATEGIC_SEED],
+    )
+
+
+def current_user_id():
+    return session.get("user_id")
+
+
+def all_users():
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT id, email FROM users ORDER BY id")
+            return cur.fetchall()
+
+
+def send_email(to_addr, subject, body):
+    if not SMTP_HOST or not to_addr:
+        print(f"Email not configured, skipping send to {to_addr}")
         return
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    requests.post(url, json={
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": text,
-        "parse_mode": "Markdown",
-    }, timeout=10)
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["Subject"] = subject
+    msg["From"] = SMTP_FROM
+    msg["To"] = to_addr
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.sendmail(SMTP_FROM, [to_addr], msg.as_string())
 
 
-def build_digest(digest_type="daily"):
+def build_digest(digest_type, user_id, to_email):
     today = date.today()
     today_str = today.isoformat()
     week_ago = (today - timedelta(days=7)).isoformat()
 
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT title, status, priority, deadline, category, closed_at, progress, assignee FROM tasks ORDER BY created_at")
+            cur.execute(
+                "SELECT title, status, priority, deadline, category, closed_at, progress, assignee "
+                "FROM tasks WHERE user_id = %s ORDER BY created_at",
+                (user_id,),
+            )
             tasks = cur.fetchall()
 
     if not tasks:
-        send_telegram("📋 *Дайджест задач*\n\nЗадач пока нет.")
+        send_email(to_email, "Дайджест задач", "Задач пока нет.")
         return
 
     def fmt(t):
@@ -296,13 +348,13 @@ def build_digest(digest_type="daily"):
         closed_period = [t for t in tasks
                          if t['closed_at'] and str(t['closed_at'])[:10] >= week_ago]
         period_label = "за последние 7 дней"
-        header = "📊 *Итоги недели — оценка выполнения обещаний*"
+        header = "Итоги недели — оценка выполнения обещаний"
         period = "за эту неделю"
     else:
         closed_period = [t for t in tasks
                          if t['closed_at'] and str(t['closed_at'])[:10] == today_str]
         period_label = "за сегодня"
-        header = "🌙 *Дайджест — оценка выполнения обещаний*"
+        header = "Дайджест — оценка выполнения обещаний"
         period = "за сегодня"
 
     overdue = [t for t in tasks if t['status'] != 'Завершена' and t['deadline']
@@ -312,16 +364,16 @@ def build_digest(digest_type="daily"):
 
     sections = []
     sections.append(
-        f"✅ Завершено {period_label}:\n" + "\n".join(fmt(t) for t in closed_period)
-        if closed_period else f"✅ Завершено {period_label}: ничего"
+        f"Завершено {period_label}:\n" + "\n".join(fmt(t) for t in closed_period)
+        if closed_period else f"Завершено {period_label}: ничего"
     )
     sections.append(
-        "🔴 Просрочено (активные):\n" + "\n".join(fmt(t) for t in overdue)
-        if overdue else "🔴 Просрочено: нет"
+        "Просрочено (активные):\n" + "\n".join(fmt(t) for t in overdue)
+        if overdue else "Просрочено: нет"
     )
     sections.append(
-        "🔥 В работе (высокий приоритет):\n" + "\n".join(fmt(t) for t in active_hp)
-        if active_hp else "🔥 В работе (высокий приоритет): нет"
+        "В работе (высокий приоритет):\n" + "\n".join(fmt(t) for t in active_hp)
+        if active_hp else "В работе (высокий приоритет): нет"
     )
 
     tasks_structured = "\n\n".join(sections)
@@ -336,19 +388,19 @@ def build_digest(digest_type="daily"):
 
 Сделай оценку выполнения обещаний {period} по двум категориям.
 
-🏢 РАБОЧИЕ ЦЕЛИ (категория Работа)
+РАБОЧИЕ ЦЕЛИ (категория Работа)
 1. Что обещано / в работе
 2. Что реально выполнено (из раздела Завершено)
 3. Что просрочено или зависло
 4. Оценка: X/10
 
-👤 ЛИЧНЫЕ ЦЕЛИ (категория Личное)
+ЛИЧНЫЕ ЦЕЛИ (категория Личное)
 1. Что обещано / в работе
 2. Что реально выполнено (из раздела Завершено)
 3. Что просрочено или зависло
 4. Оценка: X/10
 
-📌 ИТОГО
+ИТОГО
 — Общая оценка: X/10
 — Главный паттерн: что системно не выполняется
 — Одна конкретная рекомендация
@@ -370,18 +422,20 @@ def build_digest(digest_type="daily"):
     )
 
     summary = response.choices[0].message.content
-    send_telegram(f"{header}\n\n{summary}")
+    send_email(to_email, header, summary)
 
 
 def daily_digest():
-    build_digest("daily")
+    for user in all_users():
+        build_digest("daily", user["id"], user["email"])
 
 
 def weekly_digest():
-    build_digest("weekly")
+    for user in all_users():
+        build_digest("weekly", user["id"], user["email"])
 
 
-def build_strategic_digest():
+def build_strategic_digest(user_id, to_email):
     today = date.today()
     today_str = today.isoformat()
 
@@ -393,10 +447,10 @@ def build_strategic_digest():
 
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT * FROM strategic_goals ORDER BY area, title")
+            cur.execute("SELECT * FROM strategic_goals WHERE user_id = %s ORDER BY area, title", (user_id,))
             goals = cur.fetchall()
             if not goals:
-                send_telegram("🧭 *Стратегический обзор*\n\nСтратегических целей пока нет.")
+                send_email(to_email, "Стратегический обзор", "Стратегических целей пока нет.")
                 return
             goal_logs = {}
             for g in goals:
@@ -407,7 +461,7 @@ def build_strategic_digest():
                 goal_logs[g['id']] = cur.fetchall()
 
     # Группировка по областям
-    from collections import defaultdict, OrderedDict
+    from collections import OrderedDict
     areas = OrderedDict()
     for area in STRATEGIC_AREAS:
         areas[area] = []
@@ -473,7 +527,7 @@ def build_strategic_digest():
 {{"Здоровье": 0, "Семья": 0, "Работа": 0, "Прогрессив": 0, "Люди": 0, "Мышление": 0, "Яркость": 0, "Деньги": 0, "Публичность": 0, "Принципы": 0}}
 ```
 
-🧭 СТРАТЕГИЧЕСКИЙ ОБЗОР — {today_str}
+СТРАТЕГИЧЕСКИЙ ОБЗОР — {today_str}
 
 [для каждого блока]:
 {{эмодзи}} {{Название}} — {{X}}/10 {{стрелка ↑/→/↓}} — {{одна фраза: оценка блока}}
@@ -483,9 +537,9 @@ def build_strategic_digest():
 Если активных записей нет — строку с буллетами не добавляй.
 Эмодзи для блоков: Здоровье💪 Семья❤️ Работа⚡ Прогрессив🤖 Люди🤝 Мышление🧠 Яркость🎨 Деньги💰 Публичность📣 Принципы⚙️
 
-📊 ИТОГ НЕДЕЛИ — средняя оценка по всем блокам, 1 предложение про общий тренд.
+ИТОГ НЕДЕЛИ — средняя оценка по всем блокам, 1 предложение про общий тренд.
 
-📌 ГЛАВНЫЙ ВОПРОС — один сильный вопрос по самому застывшему блоку.
+ГЛАВНЫЙ ВОПРОС — один сильный вопрос по самому застывшему блоку.
 
 Без воды. Без корпоративного языка. Максимально конкретно."""
 
@@ -511,24 +565,25 @@ def build_strategic_digest():
     # Нарратив — всё после блока с JSON
     narrative = _re.sub(r'```json\s*\{.*?\}\s*```\s*', '', raw, flags=_re.DOTALL).strip()
 
-    # Сохраняем снимок в БД (upsert по week_date)
+    # Сохраняем снимок в БД (upsert по week_date + user_id)
     if scores:
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO strategic_snapshots (week_date, scores, review_text)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (week_date) DO UPDATE
+                    INSERT INTO strategic_snapshots (week_date, user_id, scores, review_text)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (week_date, user_id) DO UPDATE
                         SET scores = EXCLUDED.scores,
                             review_text = EXCLUDED.review_text,
                             created_at = NOW()
-                """, (today, _json.dumps(scores, ensure_ascii=False), narrative))
+                """, (today, user_id, _json.dumps(scores, ensure_ascii=False), narrative))
 
-    send_telegram(f"🧭 *Стратегический обзор*\n\n{narrative}")
+    send_email(to_email, "Стратегический обзор", narrative)
 
 
 def strategic_review():
-    build_strategic_digest()
+    for user in all_users():
+        build_strategic_digest(user["id"], user["email"])
 
 
 # ── Планировщик ────────────────────────────────────────────
@@ -550,11 +605,83 @@ def normalize_tags(raw):
     return ",".join(tags) if tags else None
 
 
+PUBLIC_ENDPOINTS = {"static", "health", "login", "register", "logout", "service_worker"}
+
+
+@app.before_request
+def require_login():
+    if request.endpoint in PUBLIC_ENDPOINTS or request.endpoint is None:
+        return
+    if not session.get("user_id"):
+        if request.path.startswith("/api/") or request.is_json:
+            return jsonify({"error": "unauthorized"}), 401
+        return redirect(url_for("login", next=request.path))
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "GET":
+        return render_template("register.html", error=None, invite_required=bool(INVITE_CODE))
+
+    email = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "")
+    invite_code = request.form.get("invite_code", "").strip()
+
+    if INVITE_CODE and invite_code != INVITE_CODE:
+        return render_template("register.html", error="Неверный инвайт-код", invite_required=True), 400
+    if not email or not password:
+        return render_template("register.html", error="Заполните все поля", invite_required=bool(INVITE_CODE)), 400
+
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE email=%s", (email,))
+            if cur.fetchone():
+                return render_template("register.html", error="Такой email уже зарегистрирован",
+                                       invite_required=bool(INVITE_CODE)), 400
+            cur.execute(
+                "INSERT INTO users (email, password_hash) VALUES (%s, %s) RETURNING id",
+                (email, generate_password_hash(password)),
+            )
+            user_id = cur.fetchone()[0]
+            seed_strategic_goals_for_user(cur, user_id)
+
+    session["user_id"] = user_id
+    return redirect(url_for("index"))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "GET":
+        return render_template("login.html", error=None, next=request.args.get("next", ""))
+
+    email = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "")
+    next_path = request.form.get("next", "")
+
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT id, password_hash FROM users WHERE email=%s", (email,))
+            user = cur.fetchone()
+
+    if not user or not check_password_hash(user["password_hash"], password):
+        return render_template("login.html", error="Неверный email или пароль", next=next_path), 401
+
+    session["user_id"] = user["id"]
+    return redirect(next_path or url_for("index"))
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
 @app.route("/tags")
 def get_tags():
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT tags FROM tasks WHERE tags IS NOT NULL AND tags != ''")
+            cur.execute("SELECT tags FROM tasks WHERE tags IS NOT NULL AND tags != '' AND user_id = %s",
+                        (session["user_id"],))
             rows = cur.fetchall()
     all_tags = set()
     for row in rows:
@@ -564,6 +691,7 @@ def get_tags():
 
 @app.route("/")
 def index():
+    uid = session["user_id"]
     priority_filter = request.args.get("priority", "")
     search_query = request.args.get("q", "").strip()
 
@@ -573,9 +701,9 @@ def index():
             COUNT(s.id) FILTER (WHERE s.done) AS subtask_done
         FROM tasks t
         LEFT JOIN subtasks s ON s.task_id = t.id
-        WHERE t.status != 'Завершена'
+        WHERE t.status != 'Завершена' AND t.user_id = %s
     """
-    params = []
+    params = [uid]
 
     if priority_filter:
         query += " AND t.priority = %s"
@@ -598,9 +726,9 @@ def index():
             tasks = cur.fetchall()
 
             cur.execute("""
-                SELECT * FROM tasks WHERE status = 'Завершена'
+                SELECT * FROM tasks WHERE status = 'Завершена' AND user_id = %s
                 ORDER BY closed_at DESC NULLS LAST, id DESC
-            """)
+            """, (uid,))
             done_tasks = cur.fetchall()
 
             cur.execute("""
@@ -608,9 +736,10 @@ def index():
                     MAX(l.logged_at) AS last_log_date
                 FROM strategic_goals g
                 LEFT JOIN strategic_logs l ON l.goal_id = g.id
+                WHERE g.user_id = %s
                 GROUP BY g.id
                 ORDER BY g.area, g.title
-            """)
+            """, (uid,))
             strategic_goals = cur.fetchall()
 
             # Загружаем все логи по каждой цели
@@ -649,8 +778,8 @@ def strategy_add():
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO strategic_goals (title, area) VALUES (%s, %s)",
-                    (title, area)
+                    "INSERT INTO strategic_goals (title, area, user_id) VALUES (%s, %s, %s)",
+                    (title, area, session["user_id"])
                 )
     return redirect("/?tab=strategy")
 
@@ -661,10 +790,13 @@ def strategy_log(goal_id):
     if text:
         with get_db() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO strategic_logs (goal_id, text) VALUES (%s, %s)",
-                    (goal_id, text)
-                )
+                cur.execute("SELECT id FROM strategic_goals WHERE id=%s AND user_id=%s",
+                            (goal_id, session["user_id"]))
+                if cur.fetchone():
+                    cur.execute(
+                        "INSERT INTO strategic_logs (goal_id, text) VALUES (%s, %s)",
+                        (goal_id, text)
+                    )
     return redirect("/?tab=strategy")
 
 
@@ -676,8 +808,8 @@ def strategy_edit(goal_id):
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE strategic_goals SET title=%s, area=%s WHERE id=%s",
-                    (title, area, goal_id)
+                    "UPDATE strategic_goals SET title=%s, area=%s WHERE id=%s AND user_id=%s",
+                    (title, area, goal_id, session["user_id"])
                 )
     return redirect("/?tab=strategy")
 
@@ -686,73 +818,20 @@ def strategy_edit(goal_id):
 def strategy_delete(goal_id):
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM strategic_goals WHERE id=%s", (goal_id,))
+            cur.execute("DELETE FROM strategic_goals WHERE id=%s AND user_id=%s",
+                        (goal_id, session["user_id"]))
     return redirect("/?tab=strategy")
-
-
-@app.route("/gcal-resync", methods=["POST"])
-def gcal_resync():
-    """Пересоздаёт Calendar-события для активных повторяющихся задач с RRULE.
-    Если дедлайн в прошлом — сдвигает до ближайшего предстоящего."""
-    updated = 0
-    errors = []
-    today_str = date.today().isoformat()
-    with get_db() as conn:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT id, title, deadline, priority, assignee, recurrence, calendar_event_id
-                FROM tasks
-                WHERE status != 'Завершена' AND recurrence IS NOT NULL AND deadline IS NOT NULL
-            """)
-            tasks = cur.fetchall()
-            for t in tasks:
-                # Удаляем старое событие
-                if t["calendar_event_id"]:
-                    gcal.delete_event(t["calendar_event_id"])
-                # Если дедлайн в прошлом — двигаем до ближайшего будущего
-                dl = t["deadline"]
-                while dl and str(dl) < today_str:
-                    dl = calc_next_deadline(dl, t["recurrence"])
-                if not dl:
-                    continue
-                new_id = gcal.create_event(
-                    t["title"], dl, t["priority"],
-                    None, t["assignee"], t["recurrence"],
-                    date.today()   # события с сегодня, UNTIL=дедлайн
-                )
-                cur.execute(
-                    "UPDATE tasks SET calendar_event_id=%s, deadline=%s WHERE id=%s",
-                    (new_id, dl, t["id"])
-                )
-                if new_id:
-                    updated += 1
-                else:
-                    errors.append(t["title"])
-    return jsonify({"ok": True, "updated": updated, "errors": errors})
-
-
-@app.route("/gcal-cleanup", methods=["POST"])
-def gcal_cleanup():
-    """Удаляет Calendar-события у всех завершённых задач."""
-    cleaned = 0
-    with get_db() as conn:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT id, calendar_event_id FROM tasks
-                WHERE status = 'Завершена' AND calendar_event_id IS NOT NULL
-            """)
-            tasks = cur.fetchall()
-            for t in tasks:
-                gcal.delete_event(t["calendar_event_id"])
-                cur.execute("UPDATE tasks SET calendar_event_id=NULL WHERE id=%s", (t["id"],))
-                cleaned += 1
-    return jsonify({"ok": True, "cleaned": cleaned})
 
 
 @app.route("/strategy/digest", methods=["POST"])
 def strategy_digest_manual():
+    uid = session["user_id"]
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT email FROM users WHERE id=%s", (uid,))
+            to_email = cur.fetchone()["email"]
     try:
-        build_strategic_digest()
+        build_strategic_digest(uid, to_email)
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -760,10 +839,11 @@ def strategy_digest_manual():
 
 @app.route("/strategy/analyze", methods=["POST"])
 def strategy_analyze():
+    uid = session["user_id"]
     today = date.today().isoformat()
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT * FROM strategic_goals ORDER BY area, title")
+            cur.execute("SELECT * FROM strategic_goals WHERE user_id=%s ORDER BY area, title", (uid,))
             goals = cur.fetchall()
             if not goals:
                 return jsonify({"summary": "Стратегических целей пока нет."})
@@ -824,6 +904,7 @@ def _goal_activity_status(last_log_date, today):
 
 @app.route("/strategy/export")
 def strategy_export():
+    uid = session["user_id"]
     today = date.today()
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -831,17 +912,19 @@ def strategy_export():
                 SELECT g.*, MAX(l.logged_at) AS last_log_date, COUNT(l.id) AS log_count
                 FROM strategic_goals g
                 LEFT JOIN strategic_logs l ON l.goal_id = g.id
+                WHERE g.user_id = %s
                 GROUP BY g.id
                 ORDER BY g.area, g.title
-            """)
+            """, (uid,))
             goals = cur.fetchall()
 
             cur.execute("""
                 SELECT l.goal_id, l.logged_at, l.text, g.area, g.title
                 FROM strategic_logs l
                 JOIN strategic_goals g ON g.id = l.goal_id
+                WHERE g.user_id = %s
                 ORDER BY g.area, g.title, l.logged_at DESC, l.id DESC
-            """)
+            """, (uid,))
             logs = cur.fetchall()
 
     wb = Workbook()
@@ -909,21 +992,17 @@ def add():
     status = request.form.get("status", "Новая")
     priority = request.form.get("priority", "Средний")
     deadline = request.form.get("deadline") or None
-    project = request.form.get("project", "").strip() or None
     energy = request.form.get("energy", "Средняя")
     assignee = request.form.get("assignee", "").strip() or None
     recurrence = request.form.get("recurrence", "").strip() or None
     category = request.form.get("category", "Работа")
 
-    gcal_start = date.today() if recurrence else None
-    event_id = gcal.create_event(title, deadline, priority, None, assignee, recurrence, gcal_start) if deadline else None
-
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO tasks (title, status, priority, deadline, energy, assignee, calendar_event_id, recurrence, category)"
+                "INSERT INTO tasks (title, status, priority, deadline, energy, assignee, recurrence, category, user_id)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                (title, status, priority, deadline, energy, assignee, event_id, recurrence, category),
+                (title, status, priority, deadline, energy, assignee, recurrence, category, session["user_id"]),
             )
     return redirect(url_for("index"))
 
@@ -931,9 +1010,10 @@ def add():
 @app.route("/update/<int:task_id>", methods=["POST"])
 def update(task_id):
     status = request.form.get("status")
+    uid = session["user_id"]
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT * FROM tasks WHERE id=%s", (task_id,))
+            cur.execute("SELECT * FROM tasks WHERE id=%s AND user_id=%s", (task_id, uid))
             task = cur.fetchone()
             if not task:
                 return redirect(url_for("index"))
@@ -942,39 +1022,29 @@ def update(task_id):
             now_completed = status == "Завершена"
             closed_at = date.today() if now_completed else None
 
-            cur.execute("UPDATE tasks SET status=%s, closed_at=%s WHERE id=%s",
-                        (status, closed_at, task_id))
+            cur.execute("UPDATE tasks SET status=%s, closed_at=%s WHERE id=%s AND user_id=%s",
+                        (status, closed_at, task_id, uid))
 
-            if now_completed and not was_completed:
-                # Удаляем Calendar-событие завершённой задачи
-                if task["calendar_event_id"]:
-                    gcal.delete_event(task["calendar_event_id"])
-                    cur.execute("UPDATE tasks SET calendar_event_id=NULL WHERE id=%s", (task_id,))
-
+            if now_completed and not was_completed and task["recurrence"]:
                 # Для повторяющихся — создаём следующий инстанс
-                if task["recurrence"]:
-                    next_dl = calc_next_deadline(task["deadline"], task["recurrence"])
-                    new_event_id = gcal.create_event(
-                        task["title"], next_dl, task["priority"],
-                        None, task["assignee"], task["recurrence"],
-                        date.today()   # события начинаются с сегодня, не с дедлайна
-                    ) if next_dl else None
-                    cur.execute(
-                        "INSERT INTO tasks (title, status, priority, deadline, energy,"
-                        " assignee, recurrence, calendar_event_id, category)"
-                        " VALUES (%s,'Новая',%s,%s,%s,%s,%s,%s,%s)",
-                        (task["title"], task["priority"], next_dl,
-                         task["energy"], task["assignee"], task["recurrence"],
-                         new_event_id, task["category"])
-                    )
+                next_dl = calc_next_deadline(task["deadline"], task["recurrence"])
+                cur.execute(
+                    "INSERT INTO tasks (title, status, priority, deadline, energy,"
+                    " assignee, recurrence, category, user_id)"
+                    " VALUES (%s,'Новая',%s,%s,%s,%s,%s,%s,%s)",
+                    (task["title"], task["priority"], next_dl,
+                     task["energy"], task["assignee"], task["recurrence"],
+                     task["category"], uid)
+                )
     return redirect(url_for("index"))
 
 
 @app.route("/edit/<int:task_id>", methods=["GET"])
 def edit(task_id):
+    uid = session["user_id"]
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT * FROM tasks WHERE id = %s", (task_id,))
+            cur.execute("SELECT * FROM tasks WHERE id = %s AND user_id = %s", (task_id, uid))
             task = cur.fetchone()
     if not task:
         return redirect(url_for("index"))
@@ -990,6 +1060,7 @@ def edit(task_id):
 
 @app.route("/edit/<int:task_id>", methods=["POST"])
 def edit_save(task_id):
+    uid = session["user_id"]
     title = request.form.get("title", "").strip()
     if not title:
         return redirect(url_for("edit", task_id=task_id))
@@ -1005,42 +1076,26 @@ def edit_save(task_id):
 
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT calendar_event_id, status, closed_at FROM tasks WHERE id=%s", (task_id,))
+            cur.execute("SELECT status, closed_at FROM tasks WHERE id=%s AND user_id=%s", (task_id, uid))
             row = cur.fetchone()
 
-    existing_event_id = row["calendar_event_id"] if row else None
-    new_event_id = existing_event_id
-
-    gcal_start = date.today() if recurrence else None
-    if deadline:
-        if existing_event_id:
-            gcal.update_event(existing_event_id, title, deadline, priority, None, assignee, recurrence, gcal_start)
-        else:
-            new_event_id = gcal.create_event(title, deadline, priority, None, assignee, recurrence, gcal_start)
-    else:
-        if existing_event_id:
-            gcal.delete_event(existing_event_id)
-            new_event_id = None
+    if not row:
+        return redirect(url_for("index"))
 
     closed_at = None
-    if row:
-        if status == "Завершена" and row["status"] != "Завершена":
-            closed_at = date.today()
-            # Удаляем Calendar-событие при завершении через редактирование
-            if new_event_id:
-                gcal.delete_event(new_event_id)
-                new_event_id = None
-        elif status == "Завершена":
-            closed_at = row["closed_at"]
+    if status == "Завершена" and row["status"] != "Завершена":
+        closed_at = date.today()
+    elif status == "Завершена":
+        closed_at = row["closed_at"]
 
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE tasks SET title=%s, status=%s, priority=%s, deadline=%s,"
-                " energy=%s, assignee=%s, progress=%s, calendar_event_id=%s, recurrence=%s,"
-                " closed_at=%s, category=%s WHERE id=%s",
+                " energy=%s, assignee=%s, progress=%s, recurrence=%s,"
+                " closed_at=%s, category=%s WHERE id=%s AND user_id=%s",
                 (title, status, priority, deadline, energy, assignee, progress,
-                 new_event_id, recurrence, closed_at, category, task_id),
+                 recurrence, closed_at, category, task_id, uid),
             )
     return redirect(url_for("index"))
 
@@ -1048,12 +1103,8 @@ def edit_save(task_id):
 @app.route("/delete/<int:task_id>", methods=["POST"])
 def delete(task_id):
     with get_db() as conn:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT calendar_event_id FROM tasks WHERE id=%s", (task_id,))
-            row = cur.fetchone()
-            if row and row["calendar_event_id"]:
-                gcal.delete_event(row["calendar_event_id"])
-            cur.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM tasks WHERE id = %s AND user_id = %s", (task_id, session["user_id"]))
     return redirect(url_for("index"))
 
 
@@ -1104,164 +1155,6 @@ def voice():
     return jsonify(fields)
 
 
-def tg_reply(chat_id, text):
-    requests.post(
-        f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-        json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"},
-        timeout=10,
-    )
-
-
-def get_tg_file(file_id):
-    info = requests.get(
-        f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getFile",
-        params={"file_id": file_id}, timeout=10
-    ).json()
-    file_path = info["result"]["file_path"]
-    audio = requests.get(
-        f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}", timeout=30
-    )
-    return audio.content
-
-
-def get_all_tasks_text():
-    with get_db() as conn:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT id, title, status, priority, deadline, project, tags, energy FROM tasks ORDER BY created_at")
-            tasks = cur.fetchall()
-    if not tasks:
-        return None, []
-    lines = []
-    for t in tasks:
-        line = f"[{t['id']}] «{t['title']}» | {t['status']} | {t['priority']}"
-        if t['project']:
-            line += f" | {t['project']}"
-        if t['deadline']:
-            line += f" | до {t['deadline']}"
-        if t['tags']:
-            line += f" | #{' #'.join(parse_tags(t['tags']))}"
-        lines.append(line)
-    return "\n".join(lines), tasks
-
-
-def process_bot_message(text):
-    today = date.today().isoformat()
-    tasks_text, _ = get_all_tasks_text()
-    tasks_context = f"Список задач:\n{tasks_text}" if tasks_text else "Задач пока нет."
-
-    response = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    f"Ты умный ассистент таск-менеджера. Сегодня {today}.\n"
-                    f"{tasks_context}\n\n"
-                    "Ты можешь:\n"
-                    "1. Отвечать на вопросы о задачах\n"
-                    "2. Добавлять новые задачи\n"
-                    "3. Давать дайджест/статус\n\n"
-                    "Верни JSON: {\"action\": \"answer\"|\"add_task\", \"text\": \"...\", "
-                    "\"task\": {\"title\": ..., \"priority\": \"Низкий|Средний|Высокий\", "
-                    "\"status\": \"Новая|В работе|Завершена\", \"deadline\": \"YYYY-MM-DD или null\", "
-                    "\"project\": \"...\", \"assignee\": \"...\", \"energy\": \"Лёгкая|Средняя|Тяжёлая\"}}.\n"
-                    "action=add_task если пользователь хочет добавить задачу. "
-                    "action=answer для всего остального. "
-                    "text — ответ пользователю на русском, кратко."
-                )
-            },
-            {"role": "user", "content": text}
-        ],
-        response_format={"type": "json_object"},
-    )
-
-    result = json.loads(response.choices[0].message.content)
-
-    if result.get("action") == "add_task" and result.get("task"):
-        t = result["task"]
-        title = t.get("title", "Без названия")
-        deadline = t.get("deadline") or None
-        priority = t.get("priority", "Средний")
-        assignee = t.get("assignee") or None
-        event_id = gcal.create_event(title, deadline, priority, None, assignee) if deadline else None
-        with get_db() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO tasks (title, status, priority, deadline, energy, assignee, calendar_event_id)"
-                    " VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                    (
-                        title,
-                        t.get("status", "Новая"),
-                        priority,
-                        deadline,
-                        t.get("energy", "Средняя"),
-                        assignee,
-                        event_id,
-                    )
-                )
-        return result.get("text", "✅ Задача добавлена")
-
-    return result.get("text", "Не понял запрос — попробуй ещё раз")
-
-
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    if not TELEGRAM_TOKEN:
-        return jsonify({"ok": False}), 400
-
-    update = request.json or {}
-    message = update.get("message", {})
-    chat_id = message.get("chat", {}).get("id")
-    if not chat_id:
-        return jsonify({"ok": True})
-
-    # Только от владельца
-    if str(chat_id) != str(TELEGRAM_CHAT_ID):
-        tg_reply(chat_id, "Нет доступа.")
-        return jsonify({"ok": True})
-
-    try:
-        # Голосовое сообщение
-        if "voice" in message:
-            tg_reply(chat_id, "🎙 Обрабатываю...")
-            audio_bytes = get_tg_file(message["voice"]["file_id"])
-            import io
-            transcript = openai_client.audio.transcriptions.create(
-                model="whisper-1",
-                file=("voice.ogg", io.BytesIO(audio_bytes), "audio/ogg"),
-                language="ru",
-            )
-            text = transcript.text
-            reply = process_bot_message(text)
-            tg_reply(chat_id, f"🎙 «{text}»\n\n{reply}")
-
-        # Текстовое сообщение
-        elif "text" in message:
-            text = message["text"]
-            if text == "/start":
-                tg_reply(chat_id, "👋 Привет! Я таск-менеджер.\n\nМогу:\n• Показать задачи\n• Добавить задачу голосом или текстом\n• Дать дайджест\n\nПросто напиши или надиктуй.")
-            else:
-                reply = process_bot_message(text)
-                tg_reply(chat_id, reply)
-
-    except Exception as e:
-        tg_reply(chat_id, f"⚠️ Ошибка: {str(e)[:200]}")
-
-    return jsonify({"ok": True})
-
-
-@app.route("/setup-webhook")
-def setup_webhook():
-    if not TELEGRAM_TOKEN or not WEBHOOK_URL:
-        return jsonify({"error": "TELEGRAM_BOT_TOKEN или WEBHOOK_URL не настроены"}), 400
-    res = requests.post(
-        f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook",
-        json={"url": WEBHOOK_URL},
-        timeout=10,
-    ).json()
-    return jsonify(res)
-
-
 @app.route("/ai-search", methods=["POST"])
 def ai_search():
     query = (request.json or {}).get("query", "").strip()
@@ -1270,7 +1163,11 @@ def ai_search():
 
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT id, title, status, priority, deadline, description, project, tags FROM tasks ORDER BY created_at")
+            cur.execute(
+                "SELECT id, title, status, priority, deadline, description, project, tags "
+                "FROM tasks WHERE user_id = %s ORDER BY created_at",
+                (session["user_id"],),
+            )
             tasks = cur.fetchall()
 
     if not tasks:
@@ -1310,30 +1207,31 @@ def ai_search():
 
 @app.route("/api/tactic-stats")
 def tactic_stats():
+    uid = session["user_id"]
     today = date.today()
     week_ago  = today - timedelta(days=7)
     month_ago = today - timedelta(days=30)
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT status, COUNT(*) AS cnt FROM tasks GROUP BY status")
+            cur.execute("SELECT status, COUNT(*) AS cnt FROM tasks WHERE user_id=%s GROUP BY status", (uid,))
             by_status = {r["status"]: r["cnt"] for r in cur.fetchall()}
-            cur.execute("SELECT priority, COUNT(*) AS cnt FROM tasks WHERE status != 'Завершена' GROUP BY priority")
+            cur.execute("SELECT priority, COUNT(*) AS cnt FROM tasks WHERE status != 'Завершена' AND user_id=%s GROUP BY priority", (uid,))
             by_priority = {r["priority"]: r["cnt"] for r in cur.fetchall()}
-            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status='Завершена' AND closed_at >= %s", (week_ago,))
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status='Завершена' AND closed_at >= %s AND user_id=%s", (week_ago, uid))
             closed_7 = cur.fetchone()["cnt"]
-            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status='Завершена' AND closed_at >= %s", (month_ago,))
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status='Завершена' AND closed_at >= %s AND user_id=%s", (month_ago, uid))
             closed_30 = cur.fetchone()["cnt"]
-            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE deadline < %s AND status != 'Завершена'", (today,))
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE deadline < %s AND status != 'Завершена' AND user_id=%s", (today, uid))
             overdue = cur.fetchone()["cnt"]
             cur.execute("""
                 SELECT project, COUNT(*) AS cnt FROM tasks
-                WHERE status != 'Завершена' AND project IS NOT NULL AND project != ''
+                WHERE status != 'Завершена' AND project IS NOT NULL AND project != '' AND user_id=%s
                 GROUP BY project ORDER BY cnt DESC LIMIT 8
-            """)
+            """, (uid,))
             by_project = [dict(r) for r in cur.fetchall()]
-            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status != 'Завершена'")
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status != 'Завершена' AND user_id=%s", (uid,))
             open_total = cur.fetchone()["cnt"]
-            cur.execute("SELECT ROUND(AVG(CURRENT_DATE - created_at)) AS avg_age FROM tasks WHERE status != 'Завершена'")
+            cur.execute("SELECT ROUND(AVG(CURRENT_DATE - created_at)) AS avg_age FROM tasks WHERE status != 'Завершена' AND user_id=%s", (uid,))
             avg_age = int(cur.fetchone()["avg_age"] or 0)
             closed_all = by_status.get("Завершена", 0)
     return jsonify({
@@ -1353,9 +1251,10 @@ def strategy_chart():
             cur.execute("""
                 SELECT week_date, scores, review_text
                 FROM strategic_snapshots
+                WHERE user_id = %s
                 ORDER BY week_date DESC
                 LIMIT 12
-            """)
+            """, (session["user_id"],))
             rows = cur.fetchall()
     rows = list(reversed(rows))  # хронологический порядок
     weeks = [str(r['week_date']) for r in rows]
@@ -1377,9 +1276,9 @@ def calendar_tasks():
             cur.execute("""
                 SELECT id, title, priority, category, status, deadline, assignee, energy, progress
                 FROM tasks
-                WHERE status != 'Завершена' AND deadline IS NOT NULL
+                WHERE status != 'Завершена' AND deadline IS NOT NULL AND user_id = %s
                 ORDER BY deadline
-            """)
+            """, (session["user_id"],))
             tasks = cur.fetchall()
     events = []
     for t in tasks:
@@ -1403,9 +1302,14 @@ def calendar_tasks():
 
 @app.route("/digest", methods=["POST"])
 def digest_manual():
+    uid = session["user_id"]
     digest_type = request.json.get("type", "daily") if request.is_json else "daily"
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT email FROM users WHERE id=%s", (uid,))
+            to_email = cur.fetchone()["email"]
     try:
-        build_digest(digest_type)
+        build_digest(digest_type, uid, to_email)
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -1417,7 +1321,8 @@ def analyze():
 
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT title, status, priority, deadline FROM tasks ORDER BY created_at")
+            cur.execute("SELECT title, status, priority, deadline FROM tasks WHERE user_id=%s ORDER BY created_at",
+                        (session["user_id"],))
             tasks = cur.fetchall()
 
     if not tasks:
@@ -1455,7 +1360,9 @@ def subtask_add():
     if task_id and text:
         with get_db() as conn:
             with conn.cursor() as cur:
-                cur.execute("INSERT INTO subtasks (task_id, text) VALUES (%s, %s)", (task_id, text))
+                cur.execute("SELECT id FROM tasks WHERE id=%s AND user_id=%s", (task_id, session["user_id"]))
+                if cur.fetchone():
+                    cur.execute("INSERT INTO subtasks (task_id, text) VALUES (%s, %s)", (task_id, text))
     return redirect(url_for("edit", task_id=task_id))
 
 
@@ -1463,7 +1370,11 @@ def subtask_add():
 def subtask_toggle(sub_id):
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT task_id, done FROM subtasks WHERE id=%s", (sub_id,))
+            cur.execute("""
+                SELECT s.task_id, s.done FROM subtasks s
+                JOIN tasks t ON t.id = s.task_id
+                WHERE s.id=%s AND t.user_id=%s
+            """, (sub_id, session["user_id"]))
             row = cur.fetchone()
             if row:
                 cur.execute("UPDATE subtasks SET done=%s WHERE id=%s", (not row["done"], sub_id))
@@ -1475,48 +1386,53 @@ def subtask_toggle(sub_id):
 def subtask_delete(sub_id):
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT task_id FROM subtasks WHERE id=%s", (sub_id,))
+            cur.execute("""
+                SELECT s.task_id FROM subtasks s
+                JOIN tasks t ON t.id = s.task_id
+                WHERE s.id=%s AND t.user_id=%s
+            """, (sub_id, session["user_id"]))
             row = cur.fetchone()
-            cur.execute("DELETE FROM subtasks WHERE id=%s", (sub_id,))
             if row:
+                cur.execute("DELETE FROM subtasks WHERE id=%s", (sub_id,))
                 return redirect(url_for("edit", task_id=row["task_id"]))
     return redirect(url_for("index"))
 
 
 @app.route("/dashboard")
 def dashboard():
+    uid = session["user_id"]
     today = date.today()
     week_ago = today - timedelta(days=7)
     month_ago = today - timedelta(days=30)
 
     with get_db() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT status, COUNT(*) AS cnt FROM tasks GROUP BY status")
+            cur.execute("SELECT status, COUNT(*) AS cnt FROM tasks WHERE user_id=%s GROUP BY status", (uid,))
             by_status = {r["status"]: r["cnt"] for r in cur.fetchall()}
 
-            cur.execute("SELECT priority, COUNT(*) AS cnt FROM tasks WHERE status != 'Завершена' GROUP BY priority")
+            cur.execute("SELECT priority, COUNT(*) AS cnt FROM tasks WHERE status != 'Завершена' AND user_id=%s GROUP BY priority", (uid,))
             by_priority = {r["priority"]: r["cnt"] for r in cur.fetchall()}
 
-            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status='Завершена' AND closed_at >= %s", (week_ago,))
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status='Завершена' AND closed_at >= %s AND user_id=%s", (week_ago, uid))
             closed_7 = cur.fetchone()["cnt"]
 
-            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status='Завершена' AND closed_at >= %s", (month_ago,))
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status='Завершена' AND closed_at >= %s AND user_id=%s", (month_ago, uid))
             closed_30 = cur.fetchone()["cnt"]
 
-            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE deadline < %s AND status != 'Завершена'", (today,))
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE deadline < %s AND status != 'Завершена' AND user_id=%s", (today, uid))
             overdue = cur.fetchone()["cnt"]
 
             cur.execute("""
                 SELECT project, COUNT(*) AS cnt
-                FROM tasks WHERE status != 'Завершена' AND project IS NOT NULL
+                FROM tasks WHERE status != 'Завершена' AND project IS NOT NULL AND user_id=%s
                 GROUP BY project ORDER BY cnt DESC LIMIT 8
-            """)
+            """, (uid,))
             by_project = cur.fetchall()
 
-            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status != 'Завершена'")
+            cur.execute("SELECT COUNT(*) AS cnt FROM tasks WHERE status != 'Завершена' AND user_id=%s", (uid,))
             open_total = cur.fetchone()["cnt"]
 
-            cur.execute("SELECT ROUND(AVG(CURRENT_DATE - created_at)) AS avg_age FROM tasks WHERE status != 'Завершена'")
+            cur.execute("SELECT ROUND(AVG(CURRENT_DATE - created_at)) AS avg_age FROM tasks WHERE status != 'Завершена' AND user_id=%s", (uid,))
             avg_age = cur.fetchone()["avg_age"] or 0
 
     return render_template("dashboard.html",
@@ -1542,7 +1458,7 @@ def health():
     result = {}
     result["DATABASE_URL_set"] = bool(os.environ.get("DATABASE_URL"))
     result["OPENAI_API_KEY_set"] = bool(os.environ.get("OPENAI_API_KEY"))
-    result["TELEGRAM_configured"] = bool(TELEGRAM_TOKEN and TELEGRAM_CHAT_ID)
+    result["SMTP_configured"] = bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
     try:
         with get_db() as conn:
             with conn.cursor() as cur:

@@ -47,6 +47,11 @@
             letter-spacing: -0.01em;
             color: #1d1d1f;
         }
+        .site-header form { margin-left: auto; }
+        .site-header a, .site-header button.link-btn {
+            font-size: 0.85rem; color: #0071e3; text-decoration: none; font-weight: 500;
+            background: none; border: none; cursor: pointer; padding: 0; font-family: inherit;
+        }
 
         /* ── Layout ──────────────────────────────────────────── */
         .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
@@ -927,6 +932,7 @@
 
 <header class="site-header">
     <h1>Таск-менеджер</h1>
+    <form method="POST" action="/logout"><button type="submit" class="link-btn">Выйти</button></form>
 </header>
 
 <div class="container">
@@ -961,12 +967,10 @@
         <button class="btn-analyze" id="analyzeBtn" onclick="analyzeTasks()">🤖 Анализ задач</button>
         <button class="btn-digest-daily" id="digestDailyBtn" onclick="sendDigest('daily')">📬 Дайджест сейчас</button>
         <button class="btn-digest-weekly" id="digestWeeklyBtn" onclick="sendDigest('weekly')">📊 Итоги недели</button>
-        <button class="btn-resync" id="resyncBtn" onclick="resyncGcal()">🔄 Синхр. повторения</button>
-        <button class="btn-cleanup" id="cleanupBtn" onclick="cleanupGcal()">🗑 Очистить завершённые</button>
         <span id="analyzeStatus" style="color:#6e6e73; font-size:0.82rem;"></span>
     </div>
     <div style="margin-top:8px; font-size:0.72rem; color:#6e6e73; letter-spacing:0.01em;">
-        Автодайджест: ежедневно в 21:45 и воскресенье в 20:00 по Новосибирску → Telegram
+        Автодайджест: ежедневно в 21:45 и воскресенье в 20:00 по Новосибирску → Email
     </div>
     <div id="aiResult" style="display:none;">
         <div class="ai-result" id="aiText"></div>
@@ -1231,13 +1235,13 @@
 <!-- Кнопки стратегии -->
 <div class="card">
     <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        <button class="btn-digest-weekly" id="stratDigestBtn" onclick="sendStratDigest()">🧭 Обзор в Telegram</button>
+        <button class="btn-digest-weekly" id="stratDigestBtn" onclick="sendStratDigest()">🧭 Обзор на email</button>
         <button class="btn-analyze" id="stratAnalyzeBtn" onclick="analyzeStrategy()">🤖 Анализ целей</button>
         <a class="btn-cleanup" href="/strategy/export" style="font-size:0.82rem; text-decoration:none; display:inline-flex; align-items:center;">📊 Выгрузить в Excel</a>
         <span id="stratDigestStatus" style="color:#6e6e73; font-size:0.82rem;"></span>
     </div>
     <div style="margin-top:8px; font-size:0.72rem; color:#6e6e73;">
-        Автообзор: воскресенье 10:00 по Новосибирску → Telegram
+        Автообзор: воскресенье 10:00 по Новосибирску → Email
     </div>
     <div id="stratAnalyzeResult" style="display:none;">
         <div class="ai-result" id="stratAnalyzeText"></div>
@@ -1534,7 +1538,7 @@ async function sendDigest(type) {
     const weeklyBtn = document.getElementById("digestWeeklyBtn");
     const statusEl  = document.getElementById("analyzeStatus");
     dailyBtn.disabled = true; weeklyBtn.disabled = true;
-    statusEl.textContent = "Отправляю в Telegram...";
+    statusEl.textContent = "Отправляю на email...";
     try {
         const res  = await fetch("/digest", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({type}) });
         const data = await res.json();
@@ -1546,47 +1550,11 @@ async function sendDigest(type) {
     }
 }
 
-// ── Синхронизация Google Calendar ─────────────────────────
-async function resyncGcal() {
-    const btn = document.getElementById("resyncBtn");
-    const statusEl = document.getElementById("analyzeStatus");
-    btn.disabled = true; statusEl.textContent = "Синхронизирую...";
-    try {
-        const res  = await fetch("/gcal-resync", { method:"POST" });
-        const data = await res.json();
-        const errMsg = data.errors?.length ? ` (ошибки: ${data.errors.join(", ")})` : "";
-        statusEl.textContent = data.ok
-            ? `✓ Обновлено: ${data.updated}${errMsg}`
-            : "Ошибка: " + data.error;
-    } catch(e) { statusEl.textContent = "Ошибка"; }
-    finally {
-        btn.disabled = false;
-        setTimeout(() => { statusEl.textContent = ""; }, 5000);
-    }
-}
-
-async function cleanupGcal() {
-    const btn = document.getElementById("cleanupBtn");
-    const statusEl = document.getElementById("analyzeStatus");
-    btn.disabled = true; statusEl.textContent = "Удаляю из календаря...";
-    try {
-        const res  = await fetch("/gcal-cleanup", { method:"POST" });
-        const data = await res.json();
-        statusEl.textContent = data.ok
-            ? `✓ Удалено событий: ${data.cleaned}`
-            : "Ошибка: " + data.error;
-    } catch(e) { statusEl.textContent = "Ошибка"; }
-    finally {
-        btn.disabled = false;
-        setTimeout(() => { statusEl.textContent = ""; }, 4000);
-    }
-}
-
 // ── Стратегический дайджест ────────────────────────────────
 async function sendStratDigest() {
     const btn = document.getElementById("stratDigestBtn");
     const statusEl = document.getElementById("stratDigestStatus");
-    btn.disabled = true; statusEl.textContent = "Отправляю в Telegram...";
+    btn.disabled = true; statusEl.textContent = "Отправляю на email...";
     try {
         const res  = await fetch("/strategy/digest", { method:"POST" });
         const data = await res.json();
