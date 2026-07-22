@@ -1237,13 +1237,13 @@
 <!-- Кнопки стратегии -->
 <div class="card">
     <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        <button class="btn-digest-weekly" id="stratDigestBtn" onclick="sendStratDigest()">🧭 Обзор на email</button>
+        <button class="btn-digest-weekly" id="stratDigestBtn" onclick="sendStratDigest()">🧭 Обзор недели</button>
         <button class="btn-analyze" id="stratAnalyzeBtn" onclick="analyzeStrategy()">🤖 Анализ целей</button>
         <a class="btn-cleanup" href="/strategy/export" style="font-size:0.82rem; text-decoration:none; display:inline-flex; align-items:center;">📊 Выгрузить в Excel</a>
         <span id="stratDigestStatus" style="color:#6e6e73; font-size:0.82rem;"></span>
     </div>
     <div style="margin-top:8px; font-size:0.72rem; color:#6e6e73;">
-        Автообзор: воскресенье 10:00 по Новосибирску → Email
+        Автообзор: воскресенье 10:00 по Новосибирску → снимок в дашборд
     </div>
     <div id="stratAnalyzeResult" style="display:none;">
         <div class="ai-result" id="stratAnalyzeText"></div>
@@ -1449,6 +1449,9 @@
         </div>
     </div>
     <div id="dashRecordStatus" style="font-size:0.82rem; color:#6e6e73; margin-bottom:8px; min-height:18px;"></div>
+    <div id="dashRecordResult" style="display:none; margin-bottom:16px;">
+        <div class="ai-result" id="dashRecordText"></div>
+    </div>
     <!-- Легенда-тоглы -->
     <div id="dashLegend" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px;"></div>
     <!-- График -->
@@ -1578,11 +1581,19 @@ async function sendDigest(type) {
 async function sendStratDigest() {
     const btn = document.getElementById("stratDigestBtn");
     const statusEl = document.getElementById("stratDigestStatus");
-    btn.disabled = true; statusEl.textContent = "Отправляю на email...";
+    const result = document.getElementById("stratAnalyzeResult");
+    const text   = document.getElementById("stratAnalyzeText");
+    btn.disabled = true; statusEl.textContent = "Считаю обзор недели...";
     try {
         const res  = await fetch("/strategy/digest", { method:"POST" });
         const data = await res.json();
-        statusEl.textContent = data.ok ? "✓ Отправлено" : "Ошибка: " + data.error;
+        if (data.ok) {
+            statusEl.textContent = "✓ Снимок записан";
+            text.textContent = data.summary || "";
+            result.style.display = "block";
+        } else {
+            statusEl.textContent = "Ошибка: " + data.error;
+        }
     } catch(e) { statusEl.textContent = "Ошибка"; }
     finally {
         btn.disabled = false;
@@ -1849,15 +1860,20 @@ let dashLoaded = false;       // уже загружено (не пустое)
 async function recordAndRefreshDashboard() {
     const btn = document.getElementById('dashRecordBtn');
     const statusEl = document.getElementById('dashRecordStatus');
+    const result = document.getElementById('dashRecordResult');
+    const text = document.getElementById('dashRecordText');
     btn.disabled = true;
     statusEl.textContent = 'Запрашиваю GPT и записываю снимок…';
     try {
         const res = await fetch('/strategy/digest', { method: 'POST' });
         const data = await res.json();
         if (data.ok) {
-            statusEl.textContent = '✓ Снимок записан — обновляю дашборд…';
+            if (data.summary) {
+                text.textContent = data.summary;
+                result.style.display = 'block';
+            }
             await initDashboard(true);  // force-перезагрузка
-            statusEl.textContent = '';
+            statusEl.textContent = '✓ Снимок записан';
         } else {
             statusEl.textContent = 'Ошибка: ' + (data.error || 'неизвестно');
         }

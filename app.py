@@ -327,7 +327,7 @@ def weekly_digest():
             print(f"weekly_digest failed for {user['email']}: {e}")
 
 
-def build_strategic_digest(user_id, to_email):
+def build_strategic_digest(user_id, to_email=None):
     today = date.today()
     today_str = today.isoformat()
 
@@ -345,8 +345,13 @@ def build_strategic_digest(user_id, to_email):
             cur.execute("SELECT * FROM strategic_goals WHERE user_id = %s ORDER BY area, title", (user_id,))
             goals = cur.fetchall()
             if not goals:
-                send_email(to_email, "Стратегический обзор", "Стратегических целей пока нет.")
-                return
+                msg = "Стратегических целей пока нет."
+                if to_email:
+                    try:
+                        send_email(to_email, "Стратегический обзор", msg)
+                    except Exception as e:
+                        print(f"strategic digest email failed for {to_email}: {e}")
+                return msg
             goal_logs = {}
             for g in goals:
                 cur.execute("""
@@ -473,7 +478,13 @@ def build_strategic_digest(user_id, to_email):
                             created_at = NOW()
                 """, (today, user_id, _json.dumps(scores, ensure_ascii=False), narrative))
 
-    send_email(to_email, "Стратегический обзор", narrative)
+    if to_email:
+        try:
+            send_email(to_email, "Стратегический обзор", narrative)
+        except Exception as e:
+            print(f"strategic digest email failed for {to_email}: {e}")
+
+    return narrative
 
 
 def strategic_review():
@@ -749,13 +760,9 @@ def strategy_area_delete(area_id):
 @app.route("/strategy/digest", methods=["POST"])
 def strategy_digest_manual():
     uid = session["user_id"]
-    with get_db() as conn:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT email FROM users WHERE id=%s", (uid,))
-            to_email = cur.fetchone()["email"]
     try:
-        build_strategic_digest(uid, to_email)
-        return jsonify({"ok": True})
+        summary = build_strategic_digest(uid)
+        return jsonify({"ok": True, "summary": summary})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
